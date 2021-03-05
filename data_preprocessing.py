@@ -11,22 +11,22 @@ import pandas as pd
 from transformers import AutoTokenizer
 
 # String Separator
-SEP = '<sep>'
-BOS = '<str>'
-EOS = '<end>'
-PAD = '<pad>'
+SEP = '[SEP]'
+BOS = '[STR]'
+EOS = '[END]'
+PAD = '[PAD]'
 
 # Categorical Special Tokens
-LEWDY = '<lewdY>'
-LEWDN = '<lewdN>'
-OFFY = '<offY>'
-OFFN = '<offN>'
-INTY = '<intY>'
-INTN = '<intN>'
-GRPY = '<grpY>'
-GRPN = '<grpN>'
-INGY = '<ingY>'
-INGN = '<ingN>'
+LEWDY = '[lewdY]'
+LEWDN = '[lewdN]'
+OFFY = '[offY]'
+OFFN = '[offN]'
+INTY = '[intY]'
+INTN = '[intN]'
+GRPY = '[grpY]'
+GRPN = '[grpN]'
+INGY = '[ingY]'
+INGN = '[ingN]'
 
 def print_head(df):
   print("Data Head")
@@ -45,18 +45,10 @@ def print_column_freq(column):
   print(column.value_counts())
   print("\n")
 
-def clean_target_stereotype(df):
-  df.targetStereotype = df.targetStereotype.replace(np.nan, '', regex=True)
-  df.targetStereotype = df.targetStereotype.str.replace(r'[.?!]$', '', regex=True)
-
-def clean_target_minority(df):
-  df.targetMinority = df.targetMinority.replace(np.nan, '', regex=True)
-  df.targetMinority = df.targetMinority.str.replace(r'[.?!]$', '', regex=True)
-
 def clean_post(df):
   df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
   df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
-  df.post = df.post.str.replace('(&#[0-9]+|&[a-zA-Z0-9]+);', ' ', regex=True)
+  #df.post = df.post.str.replace('(&#[0-9]+|&[a-zA-Z0-9]+);', ' ', regex=True)
   df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
   df.post = df.post.str.strip()
 
@@ -75,12 +67,11 @@ def create_text_column(df):
 
 def clean_df(from_file, to_file):
   df = pd.read_csv(from_file)
-  
-  clean_target_minority(df)
-  clean_target_stereotype(df)
   clean_post(df)
-  create_text_column(df)
+  df.targetMinority = df.targetMinority.replace(np.nan, '', regex=True)
+  df.targetStereotype = df.targetStereotype.replace(np.nan, '', regex=True)
   
+  create_text_column(df)
   df[['text']].sample(frac=1).to_csv(to_file, index=False)
   df[['text']].to_csv(to_file, index=False)
 
