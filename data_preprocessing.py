@@ -28,23 +28,6 @@ GRPN = '[grpN]'
 INGY = '[ingY]'
 INGN = '[ingN]'
 
-def print_head(df):
-  print("Data Head")
-  print(df.head())
-  print("\n")
-
-def print_uniques(column):
-  print("Unique Values")
-  print(column.nunique())
-  print("Total Values")
-  print(column.count())
-  print("\n")
-
-def print_column_freq(column):
-  print("Target Stereotype Freq.")
-  print(column.value_counts())
-  print("\n")
-
 def clean_post(df):
   df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
   df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
