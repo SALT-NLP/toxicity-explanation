@@ -31,7 +31,6 @@ INGN = '[ingN]'
 def clean_post(df):
   df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
   df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
-  #df.post = df.post.str.replace('(&#[0-9]+|&[a-zA-Z0-9]+);', ' ', regex=True)
   df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
   df.post = df.post.str.strip()
 
@@ -56,7 +55,6 @@ def clean_df(from_file, to_file):
   
   create_text_column(df)
   df[['text']].sample(frac=1).to_csv(to_file, index=False)
-  df[['text']].to_csv(to_file, index=False)
 
 def setup_tokenizer(model_name):
   tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)

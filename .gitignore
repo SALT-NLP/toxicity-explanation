@@ -1,5 +1,6 @@
-data/*
-model/*
-runs/*
+data/
+model/
+runs/
+pred/
 .DS_Store
 __pycache__

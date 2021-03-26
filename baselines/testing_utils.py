@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
-from nltk.translate.bleu_score import corpus_bleu
-from rouge_score import rouge_scorer
+from nltk.translate.bleu_score import corpus_bleu, sentence_bleu
+from rouge import Rouge
 
 ## Utils for prediction
 def category_split(categories, row, left_delim, right_delim):
@@ -126,11 +126,9 @@ def get_references_and_hypotheses(col_name, actual, pred):
   cmp_grp_target = pd.concat([actual[col_name].rename('actual'), \
                               pred[col_name].rename('pred')], \
                               axis=1)
-  #empty_str_list = lambda x: (len(x) > 1) | (x[0] != "")
 
   cmp_grp_target.pred = cmp_grp_target.pred.replace(np.nan, '', regex=True)
   cmp_grp_target.pred = cmp_grp_target.pred.str.lower()
-  #cmp_grp_target = cmp_grp_target[cmp_grp_target['actual'].map(empty_str_list)]
 
   references = cmp_grp_target.actual.tolist()
   hypotheses = cmp_grp_target.pred.tolist()
@@ -140,18 +138,50 @@ def get_references_and_hypotheses(col_name, actual, pred):
 def get_bleu_score(references, hypotheses):
   tokenized_hypotheses = list(map(str.split, hypotheses))
   tokenized_references = list(map(lambda s: list(map(str.split, s)), references))
-  return corpus_bleu(references, hypotheses, weights=(0.5, 0.5, 0, 0))
+  
+  bleu = np.empty((len(hypotheses), 2))
+  for i,hyp in enumerate(hypotheses):
+    bleu_ref = np.empty(len(references[i]))
+    for j,ref in enumerate(references[i]):
+      if len(ref) == 0 and len(hyp) == 0:
+        bleu_ref[j] = 1.0
+      elif len(ref) == 0 and len(hyp) != 0:
+        bleu_ref[j] = 0.0
+      elif len(ref) != 0 and len(hyp) == 0:
+        bleu_ref[j] = 0.0
+      else:
+        bleu_ref[j] = sentence_bleu([ref], hyp, weights=(0.5, 0.5))
+    bleu[i] = [np.max(bleu_ref), np.average(bleu_ref)]
+  
+  return np.average(bleu, axis=0)
 
 def get_rouge_scores(references, hypotheses):
-  rouge_scores = np.empty((len(hypotheses), 3))
-  scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+  rouge_scores = np.empty((len(hypotheses), 2, 3))
+  rouge = Rouge(metrics=['rouge-l'])
 
   for i, hyp in enumerate(hypotheses):
-    f1_scores = np.empty((len(references[i]), 3))
+    ref_scores = np.empty((len(references[i]), 3))
     for j, ref in enumerate(references[i]):
-      scores = scorer.score(ref, hyp)
-      f1_scores[j] = list(scores['rougeL'])
-    max_j = np.argmax(f1_scores, axis=0)[2]
-    rouge_scores[i] = f1_scores[max_j]
-  return np.average(rouge_scores, axis=0)
+      if len(ref) == 0 and len(hyp) == 0:
+        scores = [{'rouge-l': {'f': 1.0, 'p': 1.0, 'r': 1.0}}]
+      elif len(ref) == 0 and len(hyp) != 0:
+        scores = [{'rouge-l': {'f': 0.0, 'p': 0.0, 'r': 0.0}}]
+      elif len(ref) != 0 and len(hyp) == 0:
+        scores = [{'rouge-l': {'f': 0.0, 'p': 0.0, 'r': 0.0}}]
+      else:
+        scores = rouge.get_scores(hyp, ref)
+      ref_scores[j, 0] = scores[0]['rouge-l']['p']
+      ref_scores[j, 1] = scores[0]['rouge-l']['r']
 
+      if ref_scores[j, 0] + ref_scores[j, 1] == 0.0:
+        ref_scores[j, 2] = 0.0
+      elif np.isnan(ref_scores[j, 0]):
+        ref_scores[j, 2] = np.nan
+      else:
+        ref_scores[j, 2] = 2 * ((ref_scores[j, 0] * ref_scores[j, 1]) / \
+                                (ref_scores[j, 0] + ref_scores[j, 1]))
+
+    max_j = np.argmax(ref_scores, axis=0)[2]
+    rouge_scores[i,0,:] = ref_scores[max_j]
+    rouge_scores[i,1,:] = np.average(ref_scores, axis=0)
+  return np.average(rouge_scores, axis=0)
