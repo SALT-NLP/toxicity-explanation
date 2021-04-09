@@ -2,5 +2,6 @@ data/
 model/
 runs/
 pred/
+model_viz.py
 .DS_Store
 __pycache__

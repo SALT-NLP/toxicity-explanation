@@ -24,7 +24,7 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     self.classification_hidden = self.classifiers[0].config.num_hidden_layers
     self.classification_heads = self.classifiers[0].config.num_attention_heads
 
-    # Join Embedding
+    # Join Embedding (dim_v = 768 (BART default hidden size))
     num_v = len(self.classifiers)
     dim_v = self.config.d_model
     self.v = nn.Parameter(torch.randn(num_v, dim_v), requires_grad=True)
@@ -44,6 +44,7 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     return param_dict
 
   def _get_enrichment(self, classifier_inputs, classifier_attention, batch_size):
+    # Compute first classifier attentions
     output = self.classifiers[0](
         input_ids=classifier_inputs,
         attention_mask=classifier_attention,
@@ -51,6 +52,7 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     )
     attn_layers = output.attentions[-1].mean(dim=2)
 
+    # Compute remaining classifier attentions
     for i,classifier in enumerate(self.classifiers[1:]):
       start = (i + 1) * self.classification_heads
       end = start + self.classification_heads
@@ -66,11 +68,14 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
           dim=1
       )
 
+    # Apply dropout to join embedding and reshape attention prob
     v_dropout = self.join_dropout(self.v)
     attn_layers = torch.reshape(
         attn_layers,
         (batch_size, len(self.classifiers), self.classification_heads, -1)
     )
+
+    # Elementwise multiply Attention and Join embedding and Sum
     return (attn_layers[:,:,:,:,None] * v_dropout[:,None,None,:]).sum(axis=(1,2))
 
   def _add_enrichment_to_beam(self, encoder_outputs, enrichment, batch_size, curr_input_size):
@@ -119,12 +124,16 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     use_cache = use_cache if use_cache is not None else self.config.use_cache
     return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+    print(input_ids)
+    print(classifier_inputs)
+    print(head_mask)
+
     # Encode input
     if encoder_outputs is None:
       encoder_outputs = self.get_encoder()(
           input_ids=input_ids,
           attention_mask=attention_mask,
-          head_mask=head_mask,
+          #head_mask=head_mask,
           inputs_embeds=inputs_embeds,
           output_attentions=output_attentions,
           output_hidden_states=output_hidden_states,
@@ -141,10 +150,13 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     # Enrich Hidden State with Classifier Attention
     batch_size = classifier_inputs.shape[0]
     enrichment = self._get_enrichment(classifier_inputs, classifier_attention, batch_size)
+    
+    # Beam Search can only be true during model generation.
     if beam_search:
       print('Input Ids: ', input_ids.shape)
       curr_input_size = input_ids.shape[0]
       self._add_enrichment_to_beam(encoder_outputs, enrichment, batch_size, curr_input_size)
+    # In the latter case, we simply add directly to hidden states
     else:
       encoder_outputs.last_hidden_state += enrichment
 
