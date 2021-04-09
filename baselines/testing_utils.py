@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from nltk.translate.bleu_score import corpus_bleu, sentence_bleu
 from rouge import Rouge
+from tqdm import tqdm
 
 ## Utils for prediction
 def category_split(categories, row, left_delim, right_delim):
@@ -22,7 +23,7 @@ def append_to_df(df, row, col_names):
   df = df.append(row_df, ignore_index=True)
   return df
 
-def predict_samples(model, tokenizer, actual, pred_col, active_test):
+def predict_samples(model, tokenizer, actual, pred_col, active_test, max_length):
   pred = pd.DataFrame(columns=pred_col)
   left_delim = tokenizer.sep_token[0]
   right_delim = tokenizer.sep_token[-1]
@@ -33,17 +34,14 @@ def predict_samples(model, tokenizer, actual, pred_col, active_test):
   errors = 0
   error_inputs = []
 
-  for i,post in enumerate(list(actual['post'])):
-    if not(i % 100):
-      print(i)
-   
+  for i,post in enumerate(tqdm(list(actual['post']))):
     post_id = actual.iloc[i,0]
     bad_row = [post_id, post] + empty_row
     
     try:
       encoded_post = tokenizer(post, return_tensors='pt')
       output = model.generate(encoded_post['input_ids'], \
-                              max_length=150, \
+                              max_length=max_length, \
                               eos_token_id=tokenizer.eos_token_id)
       output_str = tokenizer.decode(output[0])
     except:
@@ -185,3 +183,31 @@ def get_rouge_scores(references, hypotheses):
     rouge_scores[i,0,:] = ref_scores[max_j]
     rouge_scores[i,1,:] = np.average(ref_scores, axis=0)
   return np.average(rouge_scores, axis=0)
+
+def get_bert_score(bert_scores, hypotheses, references):
+  for i,_ in enumerate(hypotheses):
+    if len(hypotheses[i]) == 0:
+      if len(references[i]) == 1:
+        if len(references[i][0]) == 0:
+          bert_scores['precision'][i] = 1.0
+          bert_scores['recall'][i] = 1.0
+          bert_scores['f1'][i] = 1.0
+        else:
+          bert_scores['precision'][i] = 0.0
+          bert_scores['recall'][i] = 0.0
+          bert_scores['f1'][i] = 0.0
+      else:
+        bert_scores['precision'][i] = 0.0
+        bert_scores['recall'][i] = 0.0
+        bert_scores['f1'][i] = 0.0
+    elif len(references[i]) == 1:
+      if len(references[i][0]) == 0:
+        bert_scores['precision'][i] = 0.0
+        bert_scores['recall'][i] = 0.0
+        bert_scores['f1'][i] = 0.0
+
+  precision = np.average(bert_scores['precision'])
+  recall = np.average(bert_scores['recall'])
+  f1 = 2 * (precision * recall) / (precision + recall)
+  return precision, recall, f1
+
