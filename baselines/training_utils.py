@@ -29,8 +29,8 @@ INGY = '[ingY]'
 INGN = '[ingN]'
 
 def clean_post(df):
-  df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
-  df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
+  #df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
+  #df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
   df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
   df.post = df.post.str.strip()
 

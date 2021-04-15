@@ -24,7 +24,7 @@ class BartForConditionalGenerationJoinModel(BartForConditionalGeneration):
     self.classification_hidden = self.classifiers[0].config.num_hidden_layers
     self.classification_heads = self.classifiers[0].config.num_attention_heads
 
-    # Join Embedding (dim_v = 768 (BART default hidden size))
+    # Join Embedding (dim_v = 768 (BART default hidden size); dropout prob = 0.1)
     num_v = len(self.classifiers)
     dim_v = self.config.d_model
     self.v = nn.Parameter(torch.randn(num_v, dim_v), requires_grad=True)
