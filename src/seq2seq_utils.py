@@ -4,10 +4,11 @@ import torch
 from transformers import BertTokenizer, BartTokenizer
 
 def clean_post(df):
-  df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
-  df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
-  df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
-  df.post = df.post.str.strip()
+    df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
+    df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
+    df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
+    df.post = df.post.str.strip()
+    return df
 
 def clean_target(df):
     df.targetStereotype = df.targetStereotype.replace(np.nan, '', regex=True)
