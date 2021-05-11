@@ -2,6 +2,7 @@
 ## will be done from the command line instead.
 
 import math
+import argparse
 from torch import nn, torch
 from transformers import Trainer, TrainingArguments
 from transformers import BartForConditionalGeneration
@@ -12,8 +13,9 @@ from seq2seq_utils import *
 # Useful constants
 CLASSIFIER_MODEL_NAME = 'bert-base-uncased'
 CLASSIFIERS = ['./classification/model/offensiveYN/checkpoint-1798/']
-              #['./classification/model/whoTarget/checkpoint-1280/']
-              #['./classification/model/sexYN/checkpoint-898/']
+              #'./classification/model/whoTarget/checkpoint-1280/',
+              #'./classification/model/sexYN/checkpoint-898/',
+              #'./classification/model/intentYN/checkpoint-898/']
 SEQ2SEQ_TOK_NAME = 'facebook/bart-base'
 #SEQ2SEQ_MODEL_NAME = './model/bart_base_checkpoint-17970'
 SEQ2SEQ_MODEL_NAME = 'facebook/bart-base'
@@ -25,27 +27,6 @@ TO_DATA = 'data/clean_train_df.csv'
 JOIN_DROPOUT = 0.2
 SEED = 154
 WARMUP_DIV = 9.793
-
-def init_model(model_name, join=True, train=True, use_cuda=True):
-    if join:
-      model = BartForConditionalGenerationJoinModel.from_pretrained(
-                  model_name,
-                  join_dropout=JOIN_DROPOUT,
-                  classifiers=CLASSIFIERS,
-                  use_cuda=use_cuda
-              )
-    else:
-      model = BartForConditionalGeneration.from_pretrained(model_name)
-    
-    if use_cuda and torch.cuda.is_available():
-      model = model.cuda()
-    
-    if train:
-      model.train()
-    else:
-      model.eval()
-    
-    return model
 
 def get_step_variables(num_rows, num_epochs, batch_size):
     if num_epochs == 1:
@@ -95,15 +76,35 @@ def train(model, tokenized):
     
     trainer.train()
 
-if __name__ == '__main__':
-    print('preparing and tokenizing data ...')
-    _, _, tokenized = tokenize_df(
-        FROM_DATA,
-        TO_DATA,
-        SEQ2SEQ_TOK_NAME,
-        CLASSIFIER_MODEL_NAME
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--join', action='store_true', help='Trains BART with Join Embedding.')
+    parser.add_argument(
+      '--join_dropout',
+      type=float,
+      default=0.2,
+      help='Dropout for Join Embedding Params.'
     )
+    return parser.parse_args()
+
+if __name__ == '__main__':
+    args = parse_args()
+    if args.join_dropout < 0.0 or args.join_dropout > 1.0:
+      raise ValueError('Join Dropout must be between 0.0 and 1.0 (inclusive)')
+    
+    #print('preparing and tokenizing data ...')
+    #_, _, tokenized = tokenize_df(
+    #    FROM_DATA,
+    #    TO_DATA,
+    #    SEQ2SEQ_TOK_NAME,
+    #    CLASSIFIER_MODEL_NAME
+    #)
     
     print('initializing model ...')
-    model = init_model(SEQ2SEQ_MODEL_NAME)
-    train(model, tokenized)
+    model = init_model(
+      SEQ2SEQ_MODEL_NAME,
+      join=args.join,
+      join_dropout=JOIN_DROPOUT,
+      classifiers=CLASSIFIERS
+    )
+    #train(model, tokenized)

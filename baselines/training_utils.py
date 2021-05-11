@@ -33,6 +33,7 @@ def clean_post(df):
   #df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
   df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
   df.post = df.post.str.strip()
+  return df
 
 def categorize_var(df):
   df.sexYN = np.where(df.sexYN >= 0.5, LEWDY, LEWDN)
@@ -40,9 +41,10 @@ def categorize_var(df):
   df.intentYN = np.where(df.intentYN >= 0.5, INTY, INTN)
   df.whoTarget = np.where(df.whoTarget >= 0.5, GRPY, GRPN)
   df.speakerMinorityYN = np.where(df.speakerMinorityYN >= 0.5, INGY, INGN)
+  return df
 
 def create_text_column(df):
-  categorize_var(df)
+  df = categorize_var(df)
   df['text'] = BOS + df.post + SEP + df.sexYN + ' ' + df.offensiveYN + ' ' + \
                   df.intentYN + ' ' + df.whoTarget + SEP + df.targetMinority + \
                   SEP + df.targetStereotype + SEP + df.speakerMinorityYN + EOS
