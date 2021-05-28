@@ -10,28 +10,18 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight", r"v"]
 
-    def __init__(self, config, join_dropout=0.0, classifiers=None, use_cuda=True):
+    def __init__(self, config, join_dropout=0.0, num_classifiers=4, num_classification_heads=12, use_cuda=True):
       super().__init__(config)
       self.model = BartModel(config)
       self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
       self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
       self.init_weights()
 
-      #self.classifiers = []
-      #for classifier in tqdm(classifiers):
-      #  model = BertForSequenceClassification.from_pretrained(classifier)
-      #  if use_cuda and torch.cuda.is_available():
-      #    model = model.cuda()
-      #  self.classifiers.append(model)
-      #self.classification_hidden = self.classifiers[0].config.num_hidden_layers
-      #self.classification_heads = self.classifiers[0].config.num_attention_heads
-
       # Join Embedding (num_classifiers, 12, 768)
-      num_classifiers = len(self.classifiers)
-      num_heads = self.classification_heads
+      self.classification_heads = num_classification_heads
       hidden_size = self.config.d_model
       
-      self.v = nn.Parameter(torch.empty(num_classifiers, num_heads, hidden_size))
+      self.v = nn.Parameter(torch.empty(num_classifiers, num_classification_heads, hidden_size))
       self.v_ReLU = nn.ReLU()
       
       nn.init.xavier_uniform_(self.v)
@@ -63,13 +53,13 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
         decoder_input_ids = decoder_input_ids[:, -1:]
 
       param_dict = {
-        "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-        "encoder_outputs": encoder_outputs,
-        "past_key_values": past,
-        "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
-        "head_mask": head_mask,
-        "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+          "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
+          "encoder_outputs": encoder_outputs,
+          "past_key_values": past,
+          "decoder_input_ids": decoder_input_ids,
+          "attention_mask": attention_mask,
+          "head_mask": head_mask,
+          "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
       }
       params = signature(self.forward).parameters
       for arg,val in kwargs.items():
@@ -77,71 +67,18 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
           param_dict[arg] = val
       return param_dict
 
-    def _get_enrichment(self, classifier_inputs, classifier_attention, batch_size):
-      # Compute first classifier attentions
-      output = self.classifiers[0](
-          input_ids=classifier_inputs,
-          attention_mask=classifier_attention,
-          output_attentions=True
-      )
-      attn_layers = output.attentions[-1].mean(dim=2)
-
-      # Compute remaining classifier attentions
-      for i,classifier in enumerate(self.classifiers[1:]):
-        start = (i + 1) * self.classification_heads
-        end = start + self.classification_heads
-
-        output = classifier(
-            input_ids=classifier_inputs,
-            attention_mask=classifier_attention,
-            output_attentions=True
-        )
-
-        attn_layers = torch.cat(
-            (attn_layers, output.attentions[-1].mean(dim=2)),
-            dim=1
-        )
-
-      # Apply dropout to join embedding and reshape attention prob
-      v_dropout = self.join_dropout(self.v)
-      attn_layers = torch.reshape(
-          attn_layers,
-          (batch_size, len(self.classifiers), self.classification_heads, -1)
-      )
-
-      # Elementwise multiply Attention and Join embedding and Sum
-      enrichment = (attn_layers[:,:,:,:,None] * self.v[:,:,None,:]).sum(axis=(1,2))
-      return enrichment
-
-    def _add_enrichment_to_beam(self, encoder_outputs, enrichment, batch_size, curr_input_size):
-      encoder_hidden_size = encoder_outputs.last_hidden_state.shape[2]
-      input_size = encoder_outputs.last_hidden_state.shape[1]
-      num_beams = curr_input_size // batch_size
-      
-      new_hidden_state = torch.reshape(
-          input=encoder_outputs.last_hidden_state,
-          shape=(batch_size, num_beams, input_size, encoder_hidden_size)
-      )
-      new_hidden_state += enrichment[:,None,:,:]
-      new_hidden_state = torch.reshape(
-          input=new_hidden_state,
-          shape=(-1, input_size, encoder_hidden_size)
-      )
-
-      encoder_outputs.last_hidden_state = self.v_ReLU(new_hidden_state)
-
     def encoder_enrichment_forward(
         self,
         input_ids,
-        classifier_inputs,
+        classifier_attention,
         attention_mask=None,
-        classifier_attention=None,
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
+      # Encoder Forward
       encoder_outputs = self.model.encoder(
           input_ids=input_ids,
           attention_mask=attention_mask,
@@ -152,16 +89,17 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
           return_dict=return_dict,
       )
 
-      batch_size = classifier_inputs.shape[0]
-      enrichment = self._get_enrichment(classifier_inputs, classifier_attention, batch_size)
+      # Apply dropout to join embedding and reshape attention prob
+      v_dropout = self.join_dropout(self.v)
+      
+      # Elementwise multiply Attention and Join embedding and Sum
+      enrichment = (classifier_attention[:,:,:,:,None] * self.v[:,:,None,:]).sum(axis=(1,2))
       encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state + enrichment
-
       return encoder_outputs
 
     def encoder_decoder_forward(
         self,
         input_ids,
-        classifier_inputs=None,
         attention_mask=None,
         classifier_attention=None,
         decoder_input_ids=None,
@@ -191,13 +129,12 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       
       # Encoder
       if encoder_outputs is None:
-        if classifier_inputs is None:
-          raise ValueError("If you do not pass in encoder outputs, you must pass in classifier inputs.")
+        if classifier_attention is None:
+          raise ValueError("If you do not pass in encoder outputs, you must pass in classifier attention.")
         encoder_outputs = self.encoder_enrichment_forward(
             input_ids,
-            classifier_inputs,
-            attention_mask=attention_mask,
             classifier_attention=classifier_attention,
+            attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -246,7 +183,6 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
     def forward(
         self,
         input_ids,
-        classifier_inputs=None,
         attention_mask=None,
         classifier_attention=None,
         decoder_input_ids=None,
@@ -274,7 +210,6 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       
       outputs = self.encoder_decoder_forward(
           input_ids,
-          classifier_inputs=classifier_inputs,
           attention_mask=attention_mask,
           classifier_attention=classifier_attention,
           decoder_input_ids=decoder_input_ids,
@@ -301,7 +236,7 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       if not return_dict:
         output = (lm_logits,) + outputs[1:]
         return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
+      
       return Seq2SeqLMOutput(
           loss=masked_lm_loss,
           logits=lm_logits,

@@ -1,5 +1,5 @@
 import sys
-sys.path.append('../shared/')
+sys.path.append('../../shared/')
 
 import pandas as pd
 import numpy as np
@@ -18,29 +18,15 @@ from train import *
 from utils import *
 
 # Useful constants
-CLASSIFIER_MODEL_NAME = 'bert-base-uncased'
-CLASSIFIERS = ['./classification/model/offensiveYN/checkpoint-1798/']
-#CLASSIFIERS = ['./classification/model/offensiveYN/checkpoint-898/',
-#               './classification/model/intentYN/checkpoint-898/',
-#               './classification/model/sexYN/checkpoint-898/',
-#               './classification/model/whoTarget/checkpoint-1280/']
-
+CLASSIFIER_TOK_NAME = 'bert-base-uncased'
 SEQ2SEQ_TOK_NAME = 'facebook/bart-base'
 
-#SEQ2SEQ_BART_BASE = './model/bart_base_checkpoint-3epoch/'
-#SEQ2SEQ_PICKLE_BASE = './data/bart_base_checkpoint-3epoch.pickle'
+FROM_DATA_FILE = '../../data/SBIC.v2.dev.csv'
+TO_DATA_FILE = 'data/clean_dev_df.csv'
 
-#SEQ2SEQ_BART_JOIN = './model/bart_join_pretrain_zeros_group_checkpoint-21560/'
-#SEQ2SEQ_PICKLE_JOIN = './data/bart_join_pretrain_zeros_group_checkpoint-21560.pickle'
-
-DATA_DIR = '../data/'
-FROM_DATA = DATA_DIR + 'SBIC.v2.dev.csv'
-TO_DATA = 'data/clean_dev_df.csv'
-
-def generate_stereotypes(tokenized, seq2seq_tok, model, pickle_file, use_cuda=True):
-    batch_size = 20
+def generate_stereotypes(tokenized, seq2seq_tok, model, pickle_file, batch_size=16, use_cuda=True):
     results = [[],[]]
-    num_batches = math.ceil(tokenized.num_rows // batch_size)
+    num_batches = math.ceil(tokenized.num_rows / batch_size)
 
     for batch in tqdm(range(num_batches)):
       i = batch * batch_size
@@ -78,47 +64,83 @@ def print_example_outputs(tokenized, tokenizer, model, use_cuda=True):
 
 def parse_args():
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
-      '--model',
-      action='store',
-      type=str,
-      required=True,
-      help='Send the checkpoint folder name in model/'
+        '-m',
+        '--model',
+        required=True,
+        help='The path for the checkpoint folder',
     )
+    parser.add_argument(
+        '-c',
+        '--classifiers',
+        nargs='+',
+        required=False,
+        help='The path for the classifier. You can pass multiple, but they must be passed in the same order as in training',
+    )
+    parser.add_argument('-b', '--batch_size', type=int, default=16, help='Batch size for testing. Use a smaller batch size with more classifiers.')
     parser.add_argument('--use_cuda', action='store_true', help='Use CUDA for testing')
+
     return parser.parse_args()
 
 if __name__ == '__main__':
     # Parse Args
     args = parse_args()
-    model_name = 'model/' + args.model + '/'
-    pickle_file = 'data/' + args.model + '.pickle'
-    join = '_join_' in args.model
+    model_path = args.model
+    model_name = os.path.basename(os.path.normpath(model_path))
+    
+    pickle_file = 'data/' + model_name + '.pickle'
+    join = '_join_' in model_name
     
     if not os.path.exists(pickle_file):
+      if join and args.classifiers is None:
+        raise ValueError('You have selected a join model, but have not provided any classifiers as args.')
+    
       # Tokenize Data
-      print('preparing and tokenizing data ...')
-      seq2seq_tok, classifier_tok, tokenized = tokenize_df(
-          FROM_DATA,
-          TO_DATA,
+      print("cleaning csv ...")
+      dataset = read_and_clean_csv(FROM_DATA_FILE, TO_DATA_FILE, train=False)
+
+      num_classifiers = 0
+      num_classification_heads = 0
+      
+      if join:
+        print("tokenizing and classifying data ...")
+        attentions = get_classifier_attention(dataset, CLASSIFIER_TOK_NAME, args.classifiers, args.use_cuda)
+        
+        print("mapping classifier attention to dataset ...")
+        dataset = map_column_to_dataset(dataset, attentions, 'classifier_attention')
+        
+        num_classifiers = attentions.shape[1]
+        num_classification_heads = attentions.shape[2]
+      
+      print('tokenizing data for bart ...')
+      seq2seq_tok, dataset = tokenize_bart_df(
+          dataset,
           SEQ2SEQ_TOK_NAME,
-          CLASSIFIER_MODEL_NAME,
-          train=False,
+          train=False
       )
       
       # Initialize Model
       print('initializing model ...')
       model = init_model(
-        model_name,
-        join=join,
-        classifiers=CLASSIFIERS,
-        train=False,
-        use_cuda=args.use_cuda
+          model_path,
+          join=join,
+          num_classifiers=num_classifiers,
+          num_classification_heads=num_classification_heads,
+          train=False,
+          use_cuda=args.use_cuda
       )
       
       # Run Tests
       print('running model tests ...')
-      generate_stereotypes(tokenized, seq2seq_tok, model, pickle_file, use_cuda=args.use_cuda)
+      generate_stereotypes(
+        dataset,
+        seq2seq_tok,
+        model,
+        pickle_file,
+        batch_size=args.batch_size,
+        use_cuda=args.use_cuda
+      )
     
     print("generating base model scores ...")
     generate_scores(pickle_file)
@@ -126,3 +148,4 @@ if __name__ == '__main__':
     ### Print Model Output ###
     #print("generating sample outputs ...")
     #print_example_outputs(tokenized, seq2seq_tok, model, use_cuda=args.use_cuda)
+    

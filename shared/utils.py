@@ -1,7 +1,39 @@
+import math
 import numpy as np
 from nltk.translate.bleu_score import corpus_bleu, sentence_bleu
 from rouge import Rouge
 
+# Classification Utils
+def f1_score(actual, pred, col, pos, neg):
+  tp = pred[(pred[col] == pos) & (pred[col] == actual[col])].shape[0]
+  fp = pred[(pred[col] == pos) & (pred[col] != actual[col])].shape[0]
+  tn = pred[(pred[col] == neg) & (pred[col] == actual[col])].shape[0]
+  fn = pred[(pred[col] == neg) & (pred[col] != actual[col])].shape[0]
+  
+  if tp + fp == 0:
+    precision = 0
+  else:
+    precision = tp / float(tp + fp)
+
+  if tp + fn == 0:
+    recall = 0
+  else:
+    recall = tp / float(tp + fn)
+  
+  if precision + recall == 0:
+    f1 = 0
+  else:
+    f1 = 2 * ((precision*recall) / (precision + recall))
+  
+  return precision, recall, f1
+
+def accuracy(actual, pred, col):
+  match = pred[pred[col] == actual[col]].shape[0]
+  total = pred.shape[0]
+  return match / float(total)
+
+
+# Language Generation Utils
 def get_bleu_score(references, hypotheses):
     #tokenized_hypotheses = list(map(str.split, hypotheses))
     #tokenized_references = list(map(lambda s: list(map(str.split, s)), references))
@@ -79,3 +111,28 @@ def get_bert_score(bert_scores, hypotheses, references):
     recall = np.average(bert_scores['recall'])
     f1 = 2 * (precision * recall) / (precision + recall)
     return precision, recall, f1
+
+# Model Training Utils
+def get_step_variables(
+    num_rows,
+    num_epochs,
+    batch_size,
+    warmup_div=None,
+    warmup_one_epoch=True
+):
+  if num_epochs == 1:
+    one_epoch_steps = math.ceil(num_rows / batch_size) // 2
+    save_steps = one_epoch_steps * 2
+    eval_steps = (save_steps * 5.0) // 100
+  else:
+    one_epoch_steps = math.ceil(num_rows / batch_size)
+    save_steps = (one_epoch_steps * num_epochs) // 2
+    eval_steps = (one_epoch_steps * num_epochs * 5.0) // 100
+  
+  if warmup_one_epoch:
+    warmup_steps = one_epoch_steps
+  else:
+    warmup_steps = (one_epoch_steps * num_epochs) // warmup_div
+  
+  return warmup_steps, save_steps, eval_steps
+
