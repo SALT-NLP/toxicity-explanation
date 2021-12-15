@@ -2,31 +2,33 @@ import pandas as pd
 import numpy as np
 import statistics as stats
 
-from classifier_utils import *
-
 def clean_post(df):
   df.post = df.post.str.replace(r'\bRT\b', ' ', regex=True)
   df.post = df.post.str.replace('(@[^\s]*\s|\s?@[^\s]*$)', ' ', regex=True)
   df.post = df.post.str.replace('https?://[^\s]*(\s|$)',' ',regex=True)
   df.post = df.post.str.strip()
+  return df
 
-def categorize_vars(df, classify_col):
+def categorize_vars(df, classify_col, colY, colN):
   # Classify each annotator's rating
-  print(df[classify_col].isna().any())
+  #print(df[classify_col].isna().any())
   df.dropna(axis=0, subset=[classify_col], inplace=True)
   df[classify_col] = np.where(df[classify_col] >= 0.5, 1, 0)
   
   # Sum classifications over annotator and choose the majority vote.
   df = df.groupby(['HITId', 'post'], as_index=False).agg({classify_col:['sum', 'count']})
   df.columns = ['HITId', 'post', 'sum', 'count']
-  df[classify_col] = np.where(df['sum'] >= df['count'] / 2, 1, 0)
+  df[classify_col] = np.where(df['sum'] >= df['count'] / 2, colY, colN)
 
-  return df[['post', classify_col]]
+  return df[['HITId', 'post', classify_col]]
 
-def prep_df_for_classification(df, to_file, classify_col):
-  df = categorize_vars(df, classify_col)
-  clean_post(df)
-  df.to_csv(to_file, index=False)
+def prep_df_for_classification(df, classify_col, colY, colN, hitids=None):
+  df = categorize_vars(df, classify_col, colY, colN)
+  df = clean_post(df)
+  
+  if hitids is not None:
+    df = df[df.HITId.isin(hitids)].reset_index()
+  
   return df
 
 def compute_statistics(sentences):

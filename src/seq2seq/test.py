@@ -1,69 +1,26 @@
-import sys
-sys.path.append('../../shared/')
-
 import pandas as pd
 import numpy as np
 import os
 import math
-import pickle
 import argparse
 from seq2seq_utils import *
 from seq2seq import BartForConditionalGenerationJoinModel
 from torch import nn, torch
-from datasets import Dataset,load_metric
 from transformers import BertTokenizer, BertForSequenceClassification
 from transformers import BartTokenizer, BartForConditionalGeneration
 from tqdm import tqdm
 from train import *
-from utils import *
+
+# Overwrite standard warning output with new warning output
+import warnings
+warnings.formatwarning = custom_warning
 
 # Useful constants
 CLASSIFIER_TOK_NAME = 'bert-base-uncased'
 SEQ2SEQ_TOK_NAME = 'facebook/bart-base'
 
-FROM_DATA_FILE = '../../data/SBIC.v2.dev.csv'
-TO_DATA_FILE = 'data/clean_dev_df.csv'
-
-def generate_stereotypes(tokenized, seq2seq_tok, model, pickle_file, batch_size=16, use_cuda=True):
-    results = [[],[]]
-    num_batches = math.ceil(tokenized.num_rows / batch_size)
-
-    for batch in tqdm(range(num_batches)):
-      i = batch * batch_size
-      j = min(tokenized.num_rows, i + batch_size)
-      
-      _, output_strs = generate_batch(tokenized, seq2seq_tok, model, i, j, use_cuda=use_cuda)
-      results[0].extend(tokenized['target'][i:j])
-      results[1].extend(output_strs)
-    pickle.dump(results, open(pickle_file, 'wb'))
-
-def generate_scores(pickle_file):
-    results = pickle.load(open(pickle_file, 'rb'))
-    references = results[0]
-    hypotheses = results[1]
-
-    bleu_score_max, bleu_score_avg = get_bleu_score(references, hypotheses)
-    rouge_scores_max, rouge_scores_avg = get_rouge_scores(references, hypotheses)
-
-    metric = load_metric('bertscore')
-    bert_scores = metric.compute(predictions=hypotheses, references=references, lang='en')
-    bert_score = get_bert_score(bert_scores, hypotheses, references)
-
-    print("Bleu Score (Avg): ", bleu_score_avg)
-    print("Bleu Score (Max): ", bleu_score_max)
-    print("Rouge Score (Avg) (Precision, Recall, F1): ", rouge_scores_avg)
-    print("Rouge Score (Max) (Precision, Recall, F1): ", rouge_scores_max)
-    print('BERT Score (Max) (Precision, Recall, F1): ', bert_score)
-
-def print_example_outputs(tokenized, tokenizer, model, use_cuda=True):
-    input_strs, output_strs = generate_batch(tokenized, tokenizer, model, 120, 130, use_cuda=use_cuda)
-    for i in range(len(input_strs)):
-      print('Input Sentence: ', input_strs[i])
-      print('Output Stereotype: ', output_strs[i])
-      print('\n')
-
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument(
         '-m',
@@ -76,37 +33,62 @@ def parse_args():
         '--classifiers',
         nargs='+',
         required=False,
-        help='The path for the classifier. You can pass multiple, but they must be passed in the same order as in training',
+        help='The path for the classifier. You can pass multiple, but they must be passed in the same order used when training',
     )
     parser.add_argument('-b', '--batch_size', type=int, default=16, help='Batch size for testing. Use a smaller batch size with more classifiers.')
     parser.add_argument('--use_cuda', action='store_true', help='Use CUDA for testing')
+    parser.add_argument('--sep', type=str, default=',', help='Pass in a separator for the data file.')
+    parser.add_argument('--generate_scores', action='store_true', help='If True, will generate scores')
+    parser.add_argument('--save_results_to_csv', action='store_true', help='If true, will save the generation results to csv.')
+    parser.add_argument('--num_results', type=int, default=200, help='If saving results to csv, then this variable saves \'num_results\' samples.')
+    parser.add_argument('--hitid_file', help='Path to HITID file for generation.')
+    parser.add_argument('--data_file', type=str, default='../../data/SBIC.v2.dev.csv', help='Data File to load.')
 
     return parser.parse_args()
+
+def check_args(args):
+    use_hitid = args.hitid_file is not None
+    model_path = args.model
+    model_name = get_file_name(model_path)
+    
+    if not(os.path.isfile(args.data_file)):
+      raise ValueError('Must pass in an existing data file for training.')
+    
+    data_source = get_file_name(args.data_file)
+    pickle_file = 'pred/' + model_name + '_' + data_source
+    pickle_file = pickle_file + '.pickle' if args.hitid_file is None else pickle_file + '_hitid.pickle'
+    results_file = 'results/' + model_name + '_' + data_source + '.csv'
+
+    join = '_join_' in model_name
+    
+    if join and args.classifiers is None:
+      raise ValueError('You have selected a join model, but have not provided any classifiers as args.')
+    
+    return model_path, pickle_file, results_file, join
 
 if __name__ == '__main__':
     # Parse Args
     args = parse_args()
-    model_path = args.model
-    model_name = os.path.basename(os.path.normpath(model_path))
-    
-    pickle_file = 'data/' + model_name + '.pickle'
-    join = '_join_' in model_name
-    
+    model_path, pickle_file, results_file, join = check_args(args)
+    print(results_file)
+
     if not os.path.exists(pickle_file):
-      if join and args.classifiers is None:
-        raise ValueError('You have selected a join model, but have not provided any classifiers as args.')
-    
+      # Load hitids if the file was passed in
+      hitid_set = None
+      if args.hitid_file is not None:
+        hitid_set = get_hitids(args.hitid_file)
+      
       # Tokenize Data
       print("cleaning csv ...")
-      dataset = read_and_clean_csv(FROM_DATA_FILE, TO_DATA_FILE, train=False)
-
+      dataset = read_and_clean_csv(args.data_file, train=False, post_ids=hitid_set, sep=args.sep)
+      
       num_classifiers = 0
       num_classification_heads = 0
       
       if join:
         print("tokenizing and classifying data ...")
         attentions = get_classifier_attention(dataset, CLASSIFIER_TOK_NAME, args.classifiers, args.use_cuda)
-        
+
         print("mapping classifier attention to dataset ...")
         dataset = map_column_to_dataset(dataset, attentions, 'classifier_attention')
         
@@ -131,21 +113,28 @@ if __name__ == '__main__':
           use_cuda=args.use_cuda
       )
       
+      # Initiailize Minibatch Iterator
+      input_cols = ['input_ids', 'classifier_attention', 'attention_mask'] if join else ['input_ids', 'attention_mask']
+      batch_iter = MinibatchIterator(dataset, seq2seq_tok, batch_size=args.batch_size, torch_cols=input_cols, use_cuda=args.use_cuda)
+      enc_forward = model.encoder_enrichment_forward if join else model.get_encoder().forward
+
       # Run Tests
       print('running model tests ...')
       generate_stereotypes(
-        dataset,
-        seq2seq_tok,
-        model,
-        pickle_file,
-        batch_size=args.batch_size,
-        use_cuda=args.use_cuda
+          batch_iter,
+          seq2seq_tok,
+          model,
+          enc_forward,
+          results_cols=['HITId','post','target'],
+          pickle_file=pickle_file
       )
     
-    print("generating base model scores ...")
-    generate_scores(pickle_file)
+    if args.generate_scores or args.save_results_to_csv:
+      print("generating base model scores ...")
+      generate_scores(
+        pickle_file,
+        save_results_to_csv=args.save_results_to_csv,
+        num_results=args.num_results,
+        save_file=results_file
+      )
 
-    ### Print Model Output ###
-    #print("generating sample outputs ...")
-    #print_example_outputs(tokenized, seq2seq_tok, model, use_cuda=args.use_cuda)
-    

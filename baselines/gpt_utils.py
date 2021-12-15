@@ -4,32 +4,22 @@ This file contains data cleaning functions for the SBIC corpus
 See the SBIC Corpus here:
   https://homes.cs.washington.edu/~msap/social-bias-frames/DATASTATEMENT.html
 """
+import pickle
 import numpy as np
 import pandas as pd
 
 from transformers import AutoTokenizer
-from datasets import Dataset
+from datasets import Dataset, load_metric
 from nltk.translate.bleu_score import corpus_bleu, sentence_bleu
 from rouge import Rouge
 from tqdm import tqdm
+from utils import *
 
 # String Separator
 SEP = '[SEP]'
 BOS = '[STR]'
 EOS = '[END]'
 PAD = '[PAD]'
-
-# Categorical Special Tokens
-LEWDY = '[lewdY]'
-LEWDN = '[lewdN]'
-OFFY = '[offY]'
-OFFN = '[offN]'
-INTY = '[intY]'
-INTN = '[intN]'
-GRPY = '[grpY]'
-GRPN = '[grpN]'
-INGY = '[ingY]'
-INGN = '[ingN]'
 
 ######################### Training Utils #########################
 def clean_post(df):
@@ -55,7 +45,7 @@ def create_text_column(df):
 
 def clean_df(from_file, to_file):
   df = pd.read_csv(from_file)
-  clean_post(df)
+  df = clean_post(df)
   df.targetMinority = df.targetMinority.replace(np.nan, '', regex=True)
   df.targetStereotype = df.targetStereotype.replace(np.nan, '', regex=True)
   
@@ -76,7 +66,6 @@ def setup_tokenizer(model_name):
 
 
 ######################### Testing Utils #########################
-
 ## Utils for prediction
 def category_split(categories, row, left_delim, right_delim):
   categories = categories.replace(' ', '')
@@ -103,11 +92,11 @@ def get_samples_from_actual(df, pred_col, post_ids=None):
   else:
     actual = df[pred_col].copy()
   
-  #actual = actual.sample(n=5)
+  actual = aggregate_and_format(actual)
   actual = categorize_var(actual)
   return actual
 
-def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length):
+def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length, num_beams):
   pred = []
   left_delim = tokenizer.sep_token[0]
   right_delim = tokenizer.sep_token[-1]
@@ -117,17 +106,19 @@ def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length)
   bad_categories = 0
   errors = 0
   error_inputs = []
-
-  for i,post in enumerate(list(actual['post'])):
+  
+  for i,post in enumerate(tqdm(list(actual.post))):
     post_id = actual.iloc[i,0]
     bad_row = [post_id, post] + empty_row
     
-    print(post)
     try:
       encoded_post = tokenizer(post, return_tensors='pt')
-      output = model.generate(encoded_post['input_ids'], \
-                              max_length=max_length, \
-                              eos_token_id=tokenizer.eos_token_id)
+      output = model.generate(
+          encoded_post['input_ids'],
+          max_length=max_length,
+          eos_token_id=tokenizer.eos_token_id,
+          num_beams=num_beams
+      )
       output_str = tokenizer.decode(output[0])
     except:
       errors += 1
@@ -155,9 +146,8 @@ def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length)
     pred.append(new_row)
   
   pred_df = pd.DataFrame(pred, columns=pred_col)
-  print(pred_df)
-  actual.to_csv(active_dict['TO ACTUAL'], index=False)
-  pred_df.to_csv(active_dict['TO PRED'], index=False)
+  pickle.dump(actual, open(active_dict['TO ACTUAL'], 'wb'))
+  pickle.dump(pred_df, open(active_dict['TO PRED'], 'wb'))
 
   print("Errors: ", errors)
   print("Error Tuples: ", error_inputs)
@@ -165,19 +155,64 @@ def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length)
   print("Bad Categories: ", bad_categories)
 
 ## Utils for Classification Testing
+def get_and_print_f1_scores(actual, pred):
+  print("Category: (Precision, Recall, F1)")
+  print('Offensive: ', f1_score(actual, pred, 'offensiveYN', OFFY, OFFN))
+  print('Intent: ', f1_score(actual, pred, 'intentYN', INTY, INTN))
+  print('Lewd: ', f1_score(actual, pred, 'sexYN', LEWDY, LEWDN))
+  print('Group Targeted: ', f1_score(actual, pred, 'whoTarget', GRPY, GRPN))
+  print('In Group: ', f1_score(actual, pred, 'speakerMinorityYN', INGY, INGN))
 
 ## Utils for Language Generation Testing
-def aggregate_and_format(df):
-  df = df.replace(np.nan, '', regex=True)
+def get_and_print_lang_gen_scores(df, actual, pred):
+  references_tm, hypotheses_tm = get_references_and_hypotheses('targetMinority', actual, pred)
+  bleu_score_tm_max, bleu_score_tm_avg = get_bleu_score(references_tm, hypotheses_tm)
+  rouge_scores_tm_max, rouge_scores_tm_avg = get_rouge_scores(references_tm, hypotheses_tm)
+  
+  references_ts, hypotheses_ts = get_references_and_hypotheses('targetStereotype', actual, pred)
+  bleu_score_ts_max, bleu_score_ts_avg = get_bleu_score(references_ts, hypotheses_ts)
+  rouge_scores_ts_max, rouge_scores_ts_avg = get_rouge_scores(references_ts, hypotheses_ts)
+    
+  metric = load_metric('bertscore')
+  bert_scores_tm = metric.compute(predictions=hypotheses_tm, references=references_tm, lang='en')
+  bert_score_tm = get_bert_score(bert_scores_tm, hypotheses_tm, references_tm)
+  
+  bert_scores_ts = metric.compute(predictions=hypotheses_ts, references=references_ts, lang='en')
+  bert_score_ts = get_bert_score(bert_scores_ts, hypotheses_ts, references_ts)
+  
+  print("Target Minority Scores: ")
+  print("Bleu Score (Avg): ", bleu_score_tm_avg)
+  print("Bleu Score (Max): ", bleu_score_tm_max)
+  print("Rouge Score (Avg) (Precision, Recall, F1): ", rouge_scores_tm_avg)
+  print("Rouge Score (Max) (Precision, Recall, F1): ", rouge_scores_tm_max)
+  print('BERT Score (Max) (Precision, Recall, F1): ', bert_score_tm)
+  
+  print("Implied Stereotype Scores: ")
+  print("Bleu Score (Avg): ", bleu_score_ts_avg)
+  print("Bleu Score (Max): ", bleu_score_ts_max)
+  print("Rouge Score (Avg) (Precision, Recall, F1): ", rouge_scores_ts_avg)
+  print("Rouge Score (Max) (Precision, Recall, F1): ", rouge_scores_ts_max)
+  print('BERT Score (Max) (Precision, Recall, F1): ', bert_score_ts)
 
+def aggregate_and_format(df):
+  df = df.fillna({
+      'sexYN': 0.0, 'offensiveYN': 0.0, 'intentYN': 0.0, 'whoTarget': 0.0,
+      'targetMinority': '', 'targetStereotype': '', 'speakerMinorityYN': 0.0
+  })
+  
   df.targetMinority = df.targetMinority.str.lower()
   df.targetStereotype = df.targetStereotype.str.lower()
   df.targetMinority = df.targetMinority.str.split('\s*,\s*')
   df.targetStereotype = df.targetStereotype.apply(lambda x: [x])
 
-  df = df.groupby('HITId').agg('sum')
+  df = df.groupby(['HITId','post']).agg({
+    'sexYN': 'mean', 'offensiveYN': 'mean', 'intentYN': 'mean', 'whoTarget': 'mean',
+    'targetMinority': 'sum', 'targetStereotype': 'sum', 'speakerMinorityYN': 'mean'
+  }).reset_index()
+  
   df.targetMinority = df.targetMinority.apply(lambda x: list(set(x)))
   df.targetStereotype = df.targetStereotype.apply(lambda x: list(set(x)))
+  
   return df
 
 def get_references_and_hypotheses(col_name, actual, pred):

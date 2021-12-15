@@ -6,26 +6,27 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 from inspect import signature
 from tqdm import tqdm
 
-class BartForConditionalGenerationJoinModel(BartPretrainedModel):
+import math
+
+class BartForConditionalGenerationKnowledgeModel(BartPretrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight", r"v"]
 
-    def __init__(self, config, join_dropout=0.0, num_classifiers=4, num_classification_heads=12, use_cuda=True):
+    def __init__(self, config, knowledge_dropout=0.0, knowledge_embed_size=600, use_cuda=True):
       super().__init__(config)
       self.model = BartModel(config)
       self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
       self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
       self.init_weights()
 
-      # Join Embedding (num_classifiers, 12, 768)
-      self.classification_heads = num_classification_heads
       hidden_size = self.config.d_model
-      
-      self.v = nn.Parameter(torch.empty(num_classifiers, num_classification_heads, hidden_size))
-      self.v_ReLU = nn.ReLU()
-      
-      nn.init.xavier_uniform_(self.v)
-      self.join_dropout = nn.Dropout(p=join_dropout)
+      self.knowledge_dropout = nn.Dropout(p=knowledge_dropout)
+      self.attn_softmax = nn.Softmax(dim=1)
+
+      self.W1 = nn.Linear(hidden_size, hidden_size)
+      self.W2 = nn.Linear(knowledge_embed_size, hidden_size)
+      self.W3 = nn.Linear(knowledge_embed_size, hidden_size)
+      self.W4 = nn.Linear(2*hidden_size, hidden_size)
 
     def get_encoder(self):
       return self.model.get_encoder()
@@ -67,10 +68,10 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
           param_dict[arg] = val
       return param_dict
 
-    def encoder_enrichment_forward(
+    def encoder_knowledge_forward(
         self,
         input_ids,
-        classifier_attention,
+        knowledge_embeds,
         attention_mask=None,
         head_mask=None,
         inputs_embeds=None,
@@ -88,20 +89,25 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
           output_hidden_states=output_hidden_states,
           return_dict=return_dict,
       )
+      query = self.knowledge_dropout(self.W1(encoder_outputs.last_hidden_state))
+      key = self.knowledge_dropout(self.W2(knowledge_embeds))
+      value = self.knowledge_dropout(self.W3(knowledge_embeds))
 
-      # Apply dropout to join embedding and reshape attention prob
-      v_dropout = self.join_dropout(self.v)
+      sqrt_d = math.sqrt(self.config.d_model)
+      out = torch.bmm(query, torch.transpose(key, 1, 2))
+      out = torch.bmm(self.attn_softmax(out / sqrt_d), value)
       
-      # Elementwise multiply Attention and Join embedding and Sum
-      enrichment = (classifier_attention[:,:,:,:,None] * self.v[:,:,None,:]).sum(axis=(1,2))
-      encoder_outputs.last_hidden_state = encoder_outputs.last_hidden_state + enrichment
+      out = torch.cat((out, encoder_outputs.last_hidden_state), dim=2)
+      out = self.knowledge_dropout(self.W4(out))
+
+      encoder_outputs.last_hidden_state = out
       return encoder_outputs
 
     def encoder_decoder_forward(
         self,
         input_ids,
         attention_mask=None,
-        classifier_attention=None,
+        knowledge_embeds=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -129,11 +135,11 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       
       # Encoder
       if encoder_outputs is None:
-        if classifier_attention is None:
+        if knowledge_embeds is None:
           raise ValueError("If you do not pass in encoder outputs, you must pass in classifier attention.")
-        encoder_outputs = self.encoder_enrichment_forward(
+        encoder_outputs = self.encoder_knowledge_forward(
             input_ids,
-            classifier_attention=classifier_attention,
+            knowledge_embeds=knowledge_embeds,
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -184,7 +190,7 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
         self,
         input_ids,
         attention_mask=None,
-        classifier_attention=None,
+        knowledge_embeds=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -211,7 +217,7 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       outputs = self.encoder_decoder_forward(
           input_ids,
           attention_mask=attention_mask,
-          classifier_attention=classifier_attention,
+          knowledge_embeds=knowledge_embeds,
           decoder_input_ids=decoder_input_ids,
           encoder_outputs=encoder_outputs,
           decoder_attention_mask=decoder_attention_mask,
@@ -227,7 +233,7 @@ class BartForConditionalGenerationJoinModel(BartPretrainedModel):
       )
 
       lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
-      
+
       masked_lm_loss = None
       if labels is not None:
         loss_fct = nn.CrossEntropyLoss()

@@ -9,7 +9,6 @@ from torch import nn, torch
 from transformers import Trainer, TrainingArguments
 from transformers import BartForConditionalGeneration
 from transformers.trainer_utils import set_seed
-from seq2seq import BartForConditionalGenerationJoinModel
 from seq2seq_utils import *
 from utils import *
 
@@ -24,53 +23,11 @@ CLASSIFIER_TOK_NAME = 'bert-base-uncased'
 SEQ2SEQ_TOK_NAME = 'facebook/bart-base'
 SEQ2SEQ_MODEL_NAME = 'facebook/bart-base'
 
-FROM_DATA_FILE = '../../data/SBIC.v2.trn.csv'
-TO_DATA_FILE = 'data/clean_train_df.csv'
-
-JOIN_DROPOUT = 0.2
-SEED = 193
- 
-def train(model, tokenized):
-    num_rows = tokenized['train'].num_rows
-    num_epochs = 3.0
-
-    learning_rate = 5e-6
-    batch_size = 4
-    
-    warmup_steps, save_steps, eval_steps = get_step_variables(
-        num_rows, num_epochs, batch_size
-    )
-    
-    print("Linear Warm Up: ", warmup_steps)
-    print("Save Steps: ", save_steps)
-    print("Eval Steps: ", eval_steps)
-
-    training_args = TrainingArguments(
-        output_dir = 'model',
-        evaluation_strategy = 'steps',
-        eval_steps = eval_steps,
-        logging_steps = eval_steps,
-        save_steps = save_steps,
-        save_total_limit = 1,
-        warmup_steps = warmup_steps,
-        learning_rate = learning_rate,
-        per_device_train_batch_size = batch_size,
-        num_train_epochs = num_epochs,
-    )
-    
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=tokenized["train"],
-        eval_dataset=tokenized["test"],
-    )
-    
-    trainer.train()
-
 def parse_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--join', action='store_true', help='Trains BART with Join Embedding.')
-    parser.add_argument('--seed', type=int, default=SEED, help='Pass in a seed value. If nothing is passed a default of 193 is used.')
+    parser.add_argument('--sep', type=str, default=',', help='Pass in a separator for the data file.')
+    parser.add_argument('--seed', type=int, default=193, help='Pass in a seed value.')
     parser.add_argument(
         '--join_dropout',
         type=float,
@@ -84,22 +41,28 @@ def parse_args():
         required=False,
         help='The path for the classifier (you can pass multiple)',
     )
+    parser.add_argument('--data_file', type=str, default='../../data/SBIC.v2.trn.csv', help='Data File to load.')
     return parser.parse_args()
 
-if __name__ == '__main__':
-    args = parse_args()
+def check_args(args):
+    if not(os.path.isfile(args.data_file)):
+      raise ValueError('Must pass in an existing data file for training.')
     
     if args.join_dropout < 0.0 or args.join_dropout > 1.0:
       raise ValueError('Join Dropout must be between 0.0 and 1.0 (inclusive)')
     
     if args.join and args.classifiers is None:
       raise ValueError('You have selected a join model, but have not provided any classifiers as args.')
-    
+
+if __name__ == '__main__':
+    args = parse_args()
+    check_args(args)
+
     set_seed(args.seed)
     print("Seed: ", args.seed)
     
     print("cleaning csv ...")
-    dataset = read_and_clean_csv(FROM_DATA_FILE, TO_DATA_FILE)
+    dataset = read_and_clean_csv(args.data_file, sep=args.sep)
 
     num_classifiers = 0
     num_classification_heads = 0
@@ -125,8 +88,8 @@ if __name__ == '__main__':
     model = init_model(
         SEQ2SEQ_MODEL_NAME,
         join=args.join,
-        join_dropout=JOIN_DROPOUT,
+        join_dropout=args.join_dropout,
         num_classifiers=num_classifiers,
         num_classification_heads=num_classification_heads,
     )
-    train(model, datasets)
+    train(model, datasets, eval_percent=5.0)

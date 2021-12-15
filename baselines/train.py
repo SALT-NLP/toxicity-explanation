@@ -99,12 +99,12 @@ def group_texts(examples):
     return result
 
 def parse_args():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--seed', type=int, help='Pass in a seed value. If nothing is passed a default is used.')
+  parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument('--seed', type=int, help='Pass in a seed value.')
   parser.add_argument('--model_type', choices=['gpt','gpt2'], default='gpt', help='Pass either \'gpt\' or \'gpt2\'')
   return parser.parse_args()
 
-def set_args(args):
+def check_args(args):
   if args.model_type == 'gpt':
     active_dict = GPT_DICT
   else:
@@ -117,7 +117,7 @@ def set_args(args):
 
 if __name__ == "__main__":
   args = parse_args()
-  active_dict = set_args(args)
+  active_dict = check_args(args)
   print("Seed: ", active_dict['SEED'])
   
   print('cleaning and splitting dataset ...')

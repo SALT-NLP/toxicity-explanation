@@ -4,6 +4,7 @@ sys.path.append('../shared/')
 import torch
 import argparse
 import os
+import pickle
 import pandas as pd
 import numpy as np
 
@@ -12,8 +13,10 @@ from utils import *
 from datasets import Dataset
 from transformers import AutoModelForCausalLM
 
-MAX_LENGTH = 128
-FROM_FILE = '../data/SBIC.v2.dev.csv'
+# Overwrite standard warning output with new warning output
+import warnings
+warnings.formatwarning = custom_warning
+
 PRED_COL = [
     'HITId', 'post', 'sexYN', 'offensiveYN', 'intentYN', 'whoTarget', \
     'targetMinority','targetStereotype', 'speakerMinorityYN'
@@ -25,38 +28,28 @@ CLASS_COL = [
 LANG_GEN_COL = ['HITId', 'targetMinority', 'targetStereotype']
 
 GPT_DICT = {
-    'TO ACTUAL': 'pred/gpt_5epoch_dev_actual.csv',
-    'TO PRED': 'pred/gpt_5epoch_dev_pred.csv',
     'TRAINED MODEL': 'model/gpt_baseline',
     'BASE MODEL': 'openai-gpt',
 }
 
 GPT2_DICT = {
-    'TO ACTUAL': 'pred/gpt2_5epoch_dev_actual.csv',
-    'TO PRED': 'pred/gpt2_5epoch_dev_pred.csv',
     'TRAINED MODEL': 'model/gpt2_baseline',
     'BASE MODEL': 'gpt2',
 }
 
-HITID_SET = {
-  '30QQTY5GMKEKBSMET2NHS1NAUF57UX', '30QQTY5GMKEKBSMET2NHS1NAUH7U7Q', '30U1YOGZGAQKDOVKVAV3DSFIVX7SDN',
-  '30U1YOGZGAQKDOVKVAV3DSFIVZTDSY', '30U1YOGZGAQKDOVKVAV3DSFIX1KSDA', '30U1YOGZGAQKDOVKVAV3DSFIY4VDSD',
-  '30UZJB2POH6LPUVCQPCJ78JEQ0B531', '30UZJB2POH6LPUVCQPCJ78JEQVI53Y', '30UZJB2POH6LPUVCQPCJ78JET82359',
-  '30Y6N4AHYPQ8C9V7GLVYNIAM9OXDRF', '30Y6N4AHYPQ8C9V7GLVYNIAMA7ERDD', '30Y6N4AHYPQ8C9V7GLVYNIAMC3UDR9',
-  '30Y6N4AHYPQ8C9V7GLVYNIAMC3VRDO', '30Z7M1Q8UYE4WXDZX2YW607B198A8T', '30Z7M1Q8UYE4WXDZX2YW607BYWI8A8',
-  '311HQEI8RSA1XRGOZPMP9T2PW157ZF', '311HQEI8RSA1XRGOZPMP9T2PWWBZ73', '311HQEI8RSA1XRGOZPMP9T2PWXJZ7D',
-  '311HQEI8RSA1XRGOZPMP9T2PWXK7ZM', '311HQEI8RSA1XRGOZPMP9T2PWZGZ7E', '311HQEI8RSA1XRGOZPMP9T2PWZN7ZT',
-  '311HQEI8RSA1XRGOZPMP9T2PY5HZ7T', '311HQEI8RSA1XRGOZPMP9T2PY5I7Z2', '311HQEI8RSA1XRGOZPMP9T2PYAW7ZQ',
-  '311HQEI8RSA1XRGOZPMP9T2PZ9D7Z6', '3126F2F5F8XSS2TSZO2TO5SS8J8EPH', '3126F2F5F8XSS2TSZO2TO5SS908EPG',
-  '3126F2F5F8XSS2TSZO2TO5SSATEPEK', '31ANT7FQN8W0J22B5A1LB2KO9005H5', '31ANT7FQN8W0J22B5A1LB2KOCEWH58'
-}
-
 def parse_args():
-  parser = argparse.ArgumentParser()
-  parser.add_argument('--model_type', choices=['gpt','gpt2'], default='gpt', help='Pass either \'gpt\' or \'gpt2\'')
+  parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument('--model_type', choices=['gpt','gpt2'], default='gpt', help='Pass either \'gpt\' or \'gpt2\'.')
+  parser.add_argument('--data_file', type=str, default='../data/SBIC.v2.dev.csv', help='Data File to load.')
+  parser.add_argument('--save_results_to_csv', action='store_true', help='If true, will save the generation results to csv.')
+  parser.add_argument('--num_results', type=int, default=200, help='If saving results to csv, then this variable saves \'num_results\' samples.')
+  parser.add_argument('--predict', action='store_true', help='Whether or not to run predictions. If False, will look for a prediction file.')
+  parser.add_argument('--hitid_file', help='Path to HITID file for generation.')
+  parser.add_argument('--num_beams', type=int, default=1, help='Set the number of beams for Beam Search.')
+  parser.add_argument('--max_length', type=int, default=128, help='Maximum Length Sequence to generate.')
   return parser.parse_args()
-
-def set_args(args):
+  
+def get_active_dict(args):
   if args.model_type == 'gpt':
     active_dict = GPT_DICT
   else:
@@ -64,63 +57,88 @@ def set_args(args):
 
   return active_dict
 
+def save_results_to_csv(pred, actual, generation_seed=756, num_results=200, save_file='results.csv'):
+  indices = list(range(len(pred['post'])))
+  random.seed(generation_seed)
+  random.shuffle(indices)
+  
+  col_names = ['HITId', 'post', 'target','prediction']
+  results_csv = []
+  for idx in indices[:num_results]:
+    results_csv.append([
+      pred['HITId'][idx],
+      pred['post'][idx].replace('\n', ' '),
+      ', '.join(actual['targetStereotype'][idx]),
+      pred['targetStereotype'][idx],
+    ])
+  
+  with open(save_file, 'w') as f:
+    csv_writer = csv.writer(f, delimiter='|')
+    csv_writer.writerow(col_names)
+    csv_writer.writerows(results_csv)
+
+def check_args(args):
+  use_hitid = args.hitid_file is not None
+  data_source = get_file_name(args.data_file)
+
+  pred_file_name = 'pred/' + args.model_type + '_' + data_source
+  pred_file_name = pred_file_name + '_hitid' if use_hitid else pred_file_name
+  results_file = 'results/' + args.model_type + '_' + data_source + '.csv'
+
+  active_dict = get_active_dict(args)
+  active_dict['TO ACTUAL'] = pred_file_name + '_actual.pickle'
+  active_dict['TO PRED'] = pred_file_name + '_pred.pickle'
+  active_dict['RESULTS'] = results_file
+    
+  if not(os.path.isfile(args.data_file)):
+    raise ValueError('Must pass in an existing data file for testing.')
+
+  if args.predict:
+    if os.path.isfile(active_dict['TO ACTUAL']):
+      warnings.warn(active_dict['TO ACTUAL'] + ' exists and will be overwritten', RuntimeWarning)
+    if os.path.isfile(active_dict['TO PRED']):
+      warnings.warn(active_dict['TO PRED'] + ' exists and will be overwritten', RuntimeWarning)
+  else:
+    if not os.path.isfile(active_dict['TO ACTUAL']):
+      raise ValueError(active_dict['TO ACTUAL'] + ' does not exist. Run again with predict flag set to True')
+    if not os.path.isfile(active_dict['TO PRED']):
+      raise ValueError(active_dict['TO PRED'] + ' does not exist. Run again with predict flag set to True')
+    if use_hitid:
+      warnings.warn(hitid_file + ' may not be used to filter data, since predict flag was not passed.')
+
+  return active_dict
+
 # Constants defined in gpt_utils
-def get_and_print_f1_scores(actual, pred):
-  print("Category: (Precision, Recall, F1)")
-  print('Offensive: ', f1_score(actual, pred, 'offensiveYN', OFFY, OFFN))
-  print('Intent: ', f1_score(actual, pred, 'intentYN', INTY, INTN))
-  print('Lewd: ', f1_score(actual, pred, 'sexYN', LEWDY, LEWDN))
-  print('Group Targeted: ', f1_score(actual, pred, 'whoTarget', GRPY, GRPN))
-  print('In Group: ', f1_score(actual, pred, 'speakerMinorityYN', INGY, INGN))
-
-def get_and_print_lang_gen_scores(df, actual, pred):
-  sub_df = df[LANG_GEN_COL]
-  sub_df = aggregate_and_format(sub_df)
-  actual = actual[CLASS_COL].join(sub_df, on='HITId').reindex(columns=PRED_COL)
-  
-  references_tm, hypotheses_tm = get_references_and_hypotheses('targetMinority', actual, pred)
-  bleu_score_tm_max, bleu_score_tm_avg = get_bleu_score(references_tm, hypotheses_tm)
-  rouge_scores_tm_max, rouge_scores_tm_avg = get_rouge_scores(references_tm, hypotheses_tm)
-  
-  references_ts, hypotheses_ts = get_references_and_hypotheses('targetStereotype', actual, pred)
-  bleu_score_ts_max, bleu_score_ts_avg = get_bleu_score(references_ts, hypotheses_ts)
-  rouge_scores_ts_max, rouge_scores_ts_avg = get_rouge_scores(references_ts, hypotheses_ts)
-  
-  print("Target Minority Scores: ")
-  print("Bleu Score (Avg): ", bleu_score_tm_avg)
-  print("Bleu Score (Max): ", bleu_score_tm_max)
-  print("Rouge Score (Avg) (Precision, Recall, F1): ", rouge_scores_tm_avg)
-  print("Rouge Score (Max) (Precision, Recall, F1): ", rouge_scores_tm_max)
-  
-  print("Implied Stereotype Scores: ")
-  print("Bleu Score (Avg): ", bleu_score_ts_avg)
-  print("Bleu Score (Max): ", bleu_score_ts_max)
-  print("Rouge Score (Avg) (Precision, Recall, F1): ", rouge_scores_ts_avg)
-  print("Rouge Score (Max) (Precision, Recall, F1): ", rouge_scores_ts_max)
-
 if __name__ == "__main__":
   args = parse_args()
-  active_dict = set_args(args)
-  
-  print('cleaning data ...')
-  df = pd.read_csv(FROM_FILE)
-  clean_post(df)
+  active_dict = check_args(args)
 
-  if not os.path.exists(active_dict['TO ACTUAL']) or not os.path.exists(active_dict['TO PRED']):
+  print('cleaning data ...')
+  df = pd.read_csv(args.data_file)
+  df = clean_post(df)
+
+  if args.predict:
     print('initializing model and tokenizer ...')
     tokenizer = setup_tokenizer(active_dict['BASE MODEL'])
     model = AutoModelForCausalLM.from_pretrained(active_dict['TRAINED MODEL'], \
                                                  pad_token_id=tokenizer.eos_token_id)
     model.eval()
     
+    hitid_set = None
+    if args.hitid_file is not None:
+      hitid_set = get_hitids(args.hitid_file)
+
     print('predicting on data ...')
-    actual = get_samples_from_actual(df, PRED_COL, post_ids=HITID_SET)
-    predict_samples(model, tokenizer, actual, PRED_COL, active_dict, MAX_LENGTH)
+    actual = get_samples_from_actual(df, PRED_COL, post_ids=hitid_set)
+    print(len(actual))
+    predict_samples(model, tokenizer, actual, PRED_COL, active_dict, args.max_length, args.num_beams)
   
   print('computing scores ...')
-  actual = pd.read_csv(active_dict['TO ACTUAL'])
-  pred = pd.read_csv(active_dict['TO PRED'])
-  
-  get_and_print_f1_scores(actual, pred)
-  get_and_print_lang_gen_scores(df, actual, pred)
+  actual = pickle.load(open(active_dict['TO ACTUAL'], 'rb'))
+  pred = pickle.load(open(active_dict['TO PRED'], 'rb'))  
 
+  if args.save_results_to_csv:
+    save_results_to_csv(pred, actual, num_results=args.num_results, save_file=active_dict['RESULTS'])
+  else:
+    get_and_print_f1_scores(actual, pred)
+    get_and_print_lang_gen_scores(df, actual, pred)
