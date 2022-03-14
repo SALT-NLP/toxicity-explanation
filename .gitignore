@@ -2,6 +2,9 @@ data/
 model/
 runs/
 pred/
+results/
+fairseq/
 model_viz.py
+grid_search.txt
 .DS_Store
 __pycache__

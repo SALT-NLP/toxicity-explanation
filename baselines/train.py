@@ -121,7 +121,7 @@ if __name__ == "__main__":
   print("Seed: ", active_dict['SEED'])
   
   print('cleaning and splitting dataset ...')
-  dataset = clean_df(FROM_TRAIN_FILE, TO_TRAIN_FILE)
+  dataset = clean_df(FROM_TRAIN_FILE)
   datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
   
   # We need to create the model and tokenizer
@@ -130,13 +130,14 @@ if __name__ == "__main__":
   tokenized_datasets = datasets.map(lambda examples: tokenizer(examples["text"]), \
                                       batched=True, num_proc=4, \
                                       remove_columns=["text"])
+  
   lm_datasets = tokenized_datasets.map(
       group_texts,
       batched=True,
       batch_size=1000,
       num_proc=4,
   )
-
+  
   print('initializing model ...')
   trainer_utils.set_seed(active_dict['SEED'])
   model = AutoModelForCausalLM.from_pretrained(active_dict['MODEL_NAME'])

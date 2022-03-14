@@ -63,27 +63,6 @@ if __name__ == '__main__':
     df_ensemble, view_tokens = read_pickle_files(args.ensemble_files, args.model_type, args.num_views)
     df = df.merge(df_ensemble, on='HITId', validate='many_to_one')
     df.drop(['post'], axis=1, inplace=True)
-    # if args.num_views == 3:
-    #   print(df.view_0.tolist()[75:76])
-    #   print(df.view_1.tolist()[75:76])
-    #   print(df.view_2.tolist()[75:76])
-    # elif args.num_views == 6:
-    #   print(df.view_0.tolist()[75:76])
-    #   print(df.view_1.tolist()[75:76])
-    #   print(df.view_2.tolist()[75:76])
-    #   print(df.view_3.tolist()[75:76])
-    #   print(df.view_4.tolist()[75:76])
-    #   print(df.view_5.tolist()[75:76])
-    # elif args.num_views == 9:
-    #   print(df.view_0.tolist()[75:76])
-    #   print(df.view_1.tolist()[75:76])
-    #   print(df.view_2.tolist()[75:76])
-    #   print(df.view_3.tolist()[75:76])
-    #   print(df.view_4.tolist()[75:76])
-    #   print(df.view_5.tolist()[75:76])
-    #   print(df.view_6.tolist()[75:76])
-    #   print(df.view_7.tolist()[75:76])
-    #   print(df.view_8.tolist()[75:76])
     
     if view_model:
       df.drop(['prediction'], axis=1, inplace=True)
@@ -116,10 +95,9 @@ if __name__ == '__main__':
       special_tokens=view_tokens,
     )
 
-    view_token_map = tokenizer.get_added_vocab()
-    view_token_ids = set(view_token_map.values())
-
     if view_model:
+      view_token_map = tokenizer.get_added_vocab()
+      view_token_ids = set(view_token_map.values())
       tokenized = add_view_token_idx_col(tokenized, view_token_ids)
     
     print('initializing model ...')

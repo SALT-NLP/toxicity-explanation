@@ -9,7 +9,7 @@ import pickle
 from tqdm import tqdm
 from datasets import Dataset
 from transformers import BertTokenizer, BartTokenizer
-from transformers import BartForConditionalGeneration
+from transformers import BartForConditionalGeneration, GPT2LMHeadModel
 from seq2seq import *
 from utils import *
 
@@ -109,7 +109,8 @@ def init_model(
     num_classifiers=4,
     num_classification_heads=12,
     train=True,
-    use_cuda=True
+    use_cuda=True,
+    gpt=False
 ):
     if join:
       model = BartForConditionalGenerationJoinModel.from_pretrained(
@@ -120,7 +121,10 @@ def init_model(
                   use_cuda=use_cuda
               )
     else:
-      model = BartForConditionalGeneration.from_pretrained(model_name)
+      if gpt:
+        model = GPT2LMHeadModel.from_pretrained(model_name)
+      else:
+        model = BartForConditionalGeneration.from_pretrained(model_name)
     
     if use_cuda and torch.cuda.is_available():
       model = model.cuda()

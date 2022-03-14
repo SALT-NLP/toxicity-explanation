@@ -442,7 +442,7 @@ def map_column_to_dataset(dataset, column, column_name):
 
 # Tokenization Utils
 # Tokenizes the dataset for encoder-decoder BART model
-def tokenize_bart_df(
+def tokenize_textgen_df(
     dataset,
     seq2seq_tok_name,
     train=True,

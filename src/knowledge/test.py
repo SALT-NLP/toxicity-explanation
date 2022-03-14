@@ -102,7 +102,7 @@ if __name__ == '__main__':
       df_post = concat_top_k_tuples(df_post, edge_dict, emb_dict=emb_dict, emb_size=EMBEDDING_SIZE*2, k=args.k)
       df = df_post.merge(df.drop(columns='post'), on='HITId', validate='one_to_many')
       dataset = Dataset.from_pandas(df)
-      seq2seq_tok, tokenized = tokenize_bart_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
+      seq2seq_tok, tokenized = tokenize_textgen_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
       
       print('initializing model ...')
       if args.model_type == 'input':

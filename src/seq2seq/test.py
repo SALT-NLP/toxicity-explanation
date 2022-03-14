@@ -96,7 +96,7 @@ if __name__ == '__main__':
         num_classification_heads = attentions.shape[2]
       
       print('tokenizing data for bart ...')
-      seq2seq_tok, dataset = tokenize_bart_df(
+      seq2seq_tok, dataset = tokenize_textgen_df(
           dataset,
           SEQ2SEQ_TOK_NAME,
           train=False
