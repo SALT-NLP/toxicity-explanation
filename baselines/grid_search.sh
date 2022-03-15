@@ -1,8 +1,7 @@
 #!/bin/bash
 
-epochs=("1.0" "3.0" "5.0")
-lrs=("4e-5" "5e-5" "6e-5" "7e-5")
-#warmup_ratios=(0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.9 1.0)
+epochs=("1.0")
+lrs=("5e-1" "5e-3" "5e-5" "5e-7" "5e-9")
 
 for epoch in ${epochs[@]}; do
   for lr in ${lrs[@]}; do

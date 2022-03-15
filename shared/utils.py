@@ -329,24 +329,22 @@ def get_step_variables(
     num_rows,
     num_epochs,
     batch_size,
-    warmup_div=None,
-    warmup_one_epoch=True,
-    eval_percent=5.0
+    eval_percent=5.0,
+    warmup_ratio=0.5 # As of now this only applies to the single epoch case.
 ):
     if num_epochs == 1:
-      one_epoch_steps = math.ceil(num_rows / batch_size) // 2
-      save_steps = one_epoch_steps * 2
+      one_epoch_steps = math.ceil(num_rows / batch_size)
+      save_steps = one_epoch_steps // 2
       eval_steps = (save_steps * eval_percent) // 100
     else:
       one_epoch_steps = math.ceil(num_rows / batch_size)
       save_steps = (one_epoch_steps * num_epochs) // 2
       eval_steps = (one_epoch_steps * num_epochs * 5.0) // 100
     
-    if warmup_one_epoch:
-      warmup_steps = one_epoch_steps
+    if num_epochs == 1:
+      warmup_steps = one_epoch_steps * warmup_ratio
     else:
-      warmup_steps = (one_epoch_steps * num_epochs) // warmup_div
-    
+      warmup_steps = one_epoch_steps
     return warmup_steps, save_steps, eval_steps
 
 def train(
@@ -359,12 +357,18 @@ def train(
     data_collator=None,
     view_model=False,
     num_views=6,
+    warmup_ratio=0.5 # As of now this only applies to the single epoch case.
 ):
     num_rows = datasets['train'].num_rows
     warmup_steps, save_steps, eval_steps = get_step_variables(
-        num_rows, num_epochs, batch_size, eval_percent=eval_percent
+        num_rows,
+        num_epochs,
+        batch_size,
+        eval_percent=eval_percent,
+        warmup_ratio=warmup_ratio
     )
     
+    eval_steps = 5000
     print("Linear Warm Up: ", warmup_steps)
     print("Save Steps: ", save_steps)
     print("Eval Steps: ", eval_steps)

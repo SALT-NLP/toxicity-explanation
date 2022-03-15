@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument('--k', type=int, default=5, help='Pass in a value for k.')
     parser.add_argument('--num_epochs', type=float, default=3.0, help='Pass in the number of training epochs.')
     parser.add_argument('--lr', type=float, default=5e-5, help='Pass in the learning rate for training.')
+    parser.add_argument('--warmup_ratio', type=float, default=0.5, help='Warmup ratio to be applied if training for 1 epoch.')
     parser.add_argument('--sep', type=str, default=',', help='Separator for data file.')
     parser.add_argument('--model_type', type=str, choices=['input', 'attn'], required=True, help='Pass in a model type.')
     parser.add_argument('--data_file', type=str, default='../../data/SBIC.v2.trn.csv', help='Data File to load.')
@@ -53,12 +54,9 @@ def check_args(args):
     if not(os.path.isfile(args.data_file)):
       raise ValueError('Must pass in an existing data file for training.')
 
-def process_data(args, use_dev=False):
+def process_data(args, data_file):
     print('loading and tokenizing data ...')
-    if use_dev:
-      df = pd.read_csv(args.dev_file, sep=args.sep, engine='python')
-    else:
-      df = pd.read_csv(args.data_file, sep=args.sep, engine='python')
+    df = pd.read_csv(data_file, sep=args.sep, engine='python')
     
     df = clean_post(df)
     df = clean_target(df)
@@ -95,9 +93,9 @@ if __name__ == '__main__':
     print(args)
     set_seed(args.seed)
     
-    dataset = process_data(args)
+    dataset = process_data(args, args.data_file)
     if args.dev_file is not None:
-      dev_dataset = process_data(args, use_dev=True)
+      dev_dataset = process_data(args, args.dev_file)
       datasets = DatasetDict({"train": dataset, "test": dev_dataset})
     else:
       datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
@@ -118,5 +116,13 @@ if __name__ == '__main__':
       model.cuda()
     
     data_collator = DataCollatorForSeq2Seq(tokenizer, model, padding=True, max_length=MAX_LENGTH)
-    train(model, tokenized, data_collator=data_collator, batch_size=args.batch_size, num_epochs=args.num_epochs, learning_rate=args.lr)
+    train(
+      model,
+      tokenized,
+      data_collator=data_collator,
+      batch_size=args.batch_size,
+      num_epochs=args.num_epochs,
+      learning_rate=args.lr,
+      warmup_ratio=args.warmup_ratio
+    )
 

@@ -77,6 +77,7 @@ if __name__ == '__main__':
       print('loading and tokenizing data ...')
       df = pd.read_csv(args.data_file, sep=args.sep, engine='python')
       df = clean_post(df)
+      
       df = clean_target(df, train=False)
       
       df_post = df[['HITId', 'post']]

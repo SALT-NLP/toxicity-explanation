@@ -93,7 +93,7 @@ if __name__ == '__main__':
         df = append_implicit_generations(df, args, tm_pred_pickle_file, generation_pickle_file, train=False)
 
       dataset = Dataset.from_pandas(df)
-      seq2seq_tok, tokenized = tokenize_bart_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
+      seq2seq_tok, tokenized = tokenize_textgen_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
       
       print('initializing model ...')
       model = BartForConditionalGeneration.from_pretrained(model_path)

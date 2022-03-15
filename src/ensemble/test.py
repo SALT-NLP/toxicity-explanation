@@ -92,7 +92,7 @@ if __name__ == '__main__':
       dataset = Dataset.from_pandas(df)
 
       print('tokenizing data ...')
-      tokenizer, tokenized = tokenize_bart_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH, special_tokens=view_tokens)      
+      tokenizer, tokenized = tokenize_textgen_df(dataset, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH, special_tokens=view_tokens)      
 
       if view_model:
         view_token_map = tokenizer.get_added_vocab()

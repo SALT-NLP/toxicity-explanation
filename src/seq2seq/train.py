@@ -28,6 +28,7 @@ def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--join', action='store_true', help='Trains BART with Join Embedding.')
     parser.add_argument('--sep', type=str, default=',', help='Pass in a separator for the data file.')
+    parser.add_argument('--batch_size', type=int, default=4, help='Pass in a batch size.')
     parser.add_argument('--seed', type=int, default=193, help='Pass in a seed value.')
     parser.add_argument(
         '--join_dropout',
@@ -44,7 +45,9 @@ def parse_args():
     )
     parser.add_argument('--data_file', type=str, default='../../data/SBIC.v2.trn.csv', help='Data File to load.')
     parser.add_argument('--dev_file', type=str, help='Dev File to load in case data split isn''t used.')
-    parser.add_argument('--num_epochs', type=float, default=5.0, help='Pass in a seed value.')
+    parser.add_argument('--num_epochs', type=float, default=5.0, help='Pass in the number of training epochs.')
+    parser.add_argument('--lr', type=float, default=5e-5, help='Pass in the learning rate for training.')
+    parser.add_argument('--warmup_ratio', type=float, default=0.5, help='Pass in the warmup ratio (only applies when training 1 epoch).')
     return parser.parse_args()
 
 def check_args(args):
@@ -103,4 +106,12 @@ if __name__ == '__main__':
         num_classifiers=num_classifiers,
         num_classification_heads=num_classification_heads,
     )
-    train(model, datasets, num_epochs=args.num_epochs, eval_percent=5.0)
+    train(
+      model,
+      datasets,
+      batch_size=args.batch_size,
+      num_epochs=args.num_epochs,
+      learning_rate=args.lr,
+      warmup_ratio=args.warmup_ratio,
+      eval_percent=5.0
+    )
