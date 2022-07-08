@@ -264,7 +264,7 @@ def concat_top_k_tuples(
 def run_target_minority_model(df, tm_pred_pickle_file, args):
     datasets = Dataset.from_pandas(df)
     
-    tokenizer, tokenized = tokenize_bart_df(datasets, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
+    tokenizer, tokenized = tokenize_textgen_df(datasets, SEQ2SEQ_MODEL_NAME, padding=False, train=False, max_length=MAX_LENGTH)
     batch_iter = MinibatchIterator(tokenized, tokenizer, batch_size=8)
      
     model = BartForConditionalGeneration.from_pretrained(args.target_minority_model)

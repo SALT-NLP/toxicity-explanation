@@ -46,9 +46,12 @@ def create_sbic_text_column(df):
 def create_text_column(df):
   df['text'] = BOS + df.post + SEP + df.targetMinority + SEP + df.targetStereotype + EOS
 
-def clean_df(from_file, sep=',', impl=False):
+def clean_df(from_file, sep=',', impl=False, clean=True):
   df = pd.read_csv(from_file, sep=sep, engine='python')
-  df = clean_post(df)
+  
+  if clean:
+    df = clean_post(df)
+  
   df.targetMinority = df.targetMinority.replace(np.nan, '', regex=True)
   df.targetStereotype = df.targetStereotype.replace(np.nan, '', regex=True)
   

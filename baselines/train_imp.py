@@ -1,14 +1,16 @@
 import sys
 sys.path.append('../shared/')
 
+import nltk
 import torch
 import argparse
+import tqdm
 import pandas as pd
 import numpy as np
 from gpt_utils import *
 from utils import *
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, GPT2TokenizerFast
 from transformers import Trainer, TrainingArguments, trainer_utils
 from datasets import DatasetDict
 import math
@@ -36,6 +38,25 @@ BLOCK_SIZE = 128
 #    'EPOCHS': 5.0,
 #    'SEED': 434
 #}
+
+class GPT2Dataset(Dataset):
+  def __init__(self, data, tokenizer, gpt2_type="gpt2", max_length=90):
+
+    self.tokenizer = tokenizer
+    self.input_ids = []
+    self.attn_masks = []
+
+    for txt in tqdm(data):
+      encodings_dict = tokenizer(txt['text'], truncation=True, max_length=max_length, padding="max_length")
+
+      self.input_ids.append(torch.tensor(encodings_dict['input_ids']))
+      self.attn_masks.append(torch.tensor(encodings_dict['attention_mask']))
+
+  def __len__(self):
+    return len(self.input_ids)
+
+  def __getitem__(self, idx):
+    return self.input_ids[idx], self.attn_masks[idx]
 
 def train(model, args, lm_datasets):
   num_rows = lm_datasets['train'].num_rows
@@ -82,9 +103,9 @@ def parse_args():
   parser.add_argument('--batch_size', default=2, type=int, help='Pass in a batch size.')
   parser.add_argument('--num_epochs', default=5.0, type=float, help='Pass in the number of training epochs.')
   parser.add_argument('--lr', default=5e-5, type=float, help='Pass in the learning rate for training.')
-  parser.add_argument('--model_name', choices=['openai-gpt','gpt2'], default='gpt', help='Pass either \'openai-gpt\' or \'gpt2\'.')
-  parser.add_argument('--data_file', default='../data/SBIC.v2.trn.csv', help='Data file for training.')
-  parser.add_argument('--dev_file', default=None, help='Dev file for training.')
+  parser.add_argument('--model_name', choices=['openai-gpt','gpt2'], default='gpt2', help='Pass either \'openai-gpt\' or \'gpt2\'.')
+  parser.add_argument('--data_file', default='../data/implicit_hate_v1_stg3_posts.trn.tsv', help='Data file for training.')
+  parser.add_argument('--dev_file', default='../data/implicit_hate_v1_stg3_posts.dev.tsv', help='Dev file for training.')
   parser.add_argument('--sep', default=',', help='Separator for file read.')
   return parser.parse_args()
 
@@ -92,18 +113,31 @@ if __name__ == "__main__":
   args = parse_args()
   model_name = ''
   print(args)
+  print()
   
   print('cleaning and splitting dataset ...')
-  dataset = clean_df(args.data_file, sep=args.sep, impl=True)
-  if args.dev_file is None:
-    datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
-  else:
-    dev_dataset = clean_df(args.dev_file, sep=args.sep, impl=True)
-    datasets = DatasetDict({'train': dataset, 'test': dev_dataset})
+  print()
+  trn_dataset = clean_df(args.data_file, sep=args.sep, impl=True)
+  dev_dataset = clean_df(args.dev_file, sep=args.sep, impl=True)
+  #datasets = DatasetDict({'train': dataset, 'test': dev_dataset})
+  
+  max_len_np = 128
 
   # We need to create the model and tokenizer
   print('tokenizing and block grouping text ...')
-  tokenizer = setup_tokenizer(args.model_name)
+  print()
+  
+  tokenizer = GPT2TokenizerFast.from_pretrained('gpt2', bos_token='[STR]', eos_token='[END]', sep_token='[SEP]', pad_token='[PAD]')
+  print("The max model length is {} for this model, although the actual embedding size for GPT small is 768".format(tokenizer.model_max_length))
+  print("The beginning of sequence token {} token has the id {}".format(tokenizer.convert_ids_to_tokens(tokenizer.bos_token_id), tokenizer.bos_token_id))
+  print("The end of sequence token {} has the id {}".format(tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id), tokenizer.eos_token_id))
+  print("The padding token {} has the id {}".format(tokenizer.convert_ids_to_tokens(tokenizer.pad_token_id), tokenizer.pad_token_id))
+  print()
+
+  trn_dataset = GPT2Dataset(trn_dataset, tokenizer, max_length=max_len_np)
+  dev_dataset = GPT2Dataset(dev_dataset, tokenizer, max_length=max_len_np)
+  exit()
+
   tokenize_func = lambda examples: tokenizer(
                                       examples["text"],
                                       padding='max_length',
