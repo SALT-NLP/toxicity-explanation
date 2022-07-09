@@ -1,4 +1,4 @@
-# Toxicity Explanation
+# Toxicity Explanation Models
 
 This repo contains code for the following paper
 
