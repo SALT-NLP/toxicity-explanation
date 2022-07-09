@@ -1,5 +1,22 @@
-# SBIC Stereotypes
+# Toxicity Explanation
 
-Currently contains code to train GPT/GPT-2 baselines on the [SBIC dataset](https://homes.cs.washington.edu/~msap/social-bias-frames/).
+This repo contains code for the following paper
 
-One can train the model using the 'train_model.ipynb' notebook and test it on the dev set using 'test_model.ipynb'.
+[Citation TBD]
+
+## Getting Started
+
+These instructions will get you started with running MixGEN (the primary model described in the paper).
+
+### Requirements
+* Python 3.7 or higher
+* Pytorch (>= 1.8.1)
+* Huggingface transformers (4.5.1)
+
+### Code Structure
+```
+|_baselines
+|_data
+|_shared
+|_src
+```
