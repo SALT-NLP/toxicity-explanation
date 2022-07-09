@@ -1,4 +1,4 @@
-data/
+data/*
 model/
 runs/
 pred/
@@ -8,3 +8,5 @@ model_viz.py
 *.txt
 .DS_Store
 __pycache__
+
+!data/*.md
