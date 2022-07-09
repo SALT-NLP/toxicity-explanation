@@ -58,3 +58,9 @@ These instructions will get you started with running MixGEN and other knowledge 
     |__ ensemble_utils.py --> Main utils for MixGEN
     |__ generation_utils.py --> Text generator class for MixGEN MultiView
 ```
+
+### Downloading the Data
+To download the data, please see the README in the data/ directory.
+
+### Training and Testing Models
+The baseline models can be trained/tested in the baselines/ directory. The Expert knowledge models can be trained/tested in the seq2seq/ directory. The Explicit/Implicit knowledge models can be trained/tested in the knowledge/ directory, while the MixGEN models can be trained in the ensemble/ directory. The READMEs in the individual directories contain instructions on training and testing.
