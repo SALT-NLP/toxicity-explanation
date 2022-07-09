@@ -6,7 +6,7 @@ This repo contains code for the following paper
 
 ## Getting Started
 
-These instructions will get you started with running MixGEN (the primary model described in the paper).
+These instructions will get you started with running MixGEN and other knowledge informed models described in the paper.
 
 ### Requirements
 * Python 3.7 or higher
