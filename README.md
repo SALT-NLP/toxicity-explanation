@@ -15,8 +15,46 @@ These instructions will get you started with running MixGEN (the primary model d
 
 ### Code Structure
 ```
-|_baselines
-|_data
-|_shared
-|_src
+|__ baselines
+  |__ README.md
+  |__ train.py
+  |__ test.py
+  |__ gpt_utils.py --> utils for baselines (all gpt models)
+  |__ grid_search.sh --> code to run grid search to tune hyperparameters
+|__ data --> This folder should contain all the main datasets that are trained/tested on
+  |__ README.md --> Instructions to download data
+|__ shared
+  |__ README.md
+  |__ utils.py --> Main utils used by most modules in this repo
+  |__ significance_test.py --> Code to run significance tests
+  |__ multi_view_trainer.py --> Code to override huggingface trainer and pytorch sampler classes
+|__ src
+  |__ seq2seq --> Code to train/test Expert Knowledge models
+    |__ README.md
+    |__ train.py
+    |__ test.py
+    |__ seq2seq.py --> Class definition for BART with join embedding
+    |__ seq2seq_utils.py
+    |__ grid_search.sh
+    |__ classification --> Contains code to train BERT classifiers used for join embedding
+      |__ README.md
+      |__ train_classifier.ipynb
+      |__ test_classifier.ipynb
+  |__ knowledge --> Code to train/test Explicit/Implicit Knowledge models
+    |__ README.md --> Instructions to train/test Explicit/Implicit Knowledge models
+    |__ train.py --> For training Explicit Knowledge models
+    |__ test.py --> For testing Explicit Knowledge models
+    |__ train_imp.py --> For training Implicit Knowledge models
+    |__ test_imp.py --> For testing Implicit Knowledge models
+    |__ knowledge.py --> Class definition for BART with Explicit Knowledge
+    |__ knowledge_utils.py
+    |__ grid_search.sh --> Grid Search on Explicit Knowledge models
+    |__ grid_search_imp.sh --> Grid Search on Implicit Knowledge models
+  |__ ensemble --> Code to train/test MixGEN models
+    |__ README.md --> Instructions to train/test MixGEN models
+    |__ train.py
+    |__ test.py
+    |__ ensemble.py --> Class definition for BART based MixGEN MultiView
+    |__ ensemble_utils.py --> Main utils for MixGEN
+    |__ generation_utils.py --> Text generator class for MixGEN MultiView
 ```
