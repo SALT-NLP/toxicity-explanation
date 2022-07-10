@@ -5,6 +5,15 @@
 To download social bias frames dataset, visit this [link](https://homes.cs.washington.edu/~msap/social-bias-frames/SBIC.v2.tgz), unzip the file
 and place the train/dev/test files in this folder.
 
+Here are some commands:
+
+```
+wget https://homes.cs.washington.edu/~msap/social-bias-frames/SBIC.v2.tgz
+tar zxvf SBIC.v2.tgz
+```
+
+The code was written with the SBIC.v2.*.csv files in mind.
+
 ## Implicit Hate Dataset
 
 To download the implicit hate dataset, visit this [link](https://github.com/gt-salt/implicit-hate), navigate to the "Where can I download the data?"
