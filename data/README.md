@@ -20,9 +20,13 @@ Social Bias Frames: Reasoning about Social and Power Implications of Language. A
 ## Implicit Hate Dataset
 
 To download the implicit hate dataset, visit this [link](https://github.com/gt-salt/implicit-hate), navigate to the "Where can I download the data?"
-section, take the survey to receive permission and add the train/test files to this directory. Please note that the implicit hate dataset does not
-contain toxicity classifications and thus cannot use the Expert Knowledge model's join embedding classifier directly. Instead, train a classifier on
-a dataset that does contain toxicity classifications and use it.
+section, take the survey to receive permission. Please note that the implicit hate dataset does not contain the same toxicity classifications as the Social Bias Frames dataset. Train a classifier on the toxicity classifications the implicit hate dataset does contain, or use a classifier trained on a different dataset.
+
+To prepare the dataset, unzip the download and place the resulting directory (called "implicit-hate-corpus") in this data directory. Then call the script, like so:
+
+```
+python prep_implicit_hate_data.py
+```
 
 All credit for this dataset goes to the original authors:
 
