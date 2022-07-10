@@ -47,7 +47,7 @@ def create_text_column(df):
   df['text'] = BOS + df.post + SEP + df.targetMinority + SEP + df.targetStereotype + EOS
 
 def clean_df(from_file, sep=',', impl=False, clean=True):
-  df = pd.read_csv(from_file, sep=sep, engine='python')
+  df = pd.read_csv(from_file, sep=sep, engine='python')[:100]
   
   if clean:
     df = clean_post(df)
@@ -59,7 +59,6 @@ def clean_df(from_file, sep=',', impl=False, clean=True):
     create_text_column(df)
   else:
     create_sbic_text_column(df)
-    #df[['text']].sample(frac=1).to_csv(to_file, index=False)
   return Dataset.from_pandas(df[['text']])
 
 def setup_tokenizer(model_name):

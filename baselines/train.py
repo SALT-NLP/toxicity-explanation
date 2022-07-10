@@ -12,13 +12,6 @@ from transformers import AutoModelForCausalLM
 from transformers import Trainer, TrainingArguments, trainer_utils
 import math
 
-# Useful Constants
-FROM_TRAIN_FILE = '../data/SBIC.v2.trn.csv'
-FROM_DEV_FILE = '../data/SBIC.v2.dev.csv'
-TO_TRAIN_FILE = 'data/baseline_train_text.csv'
-TO_DEV_FILE = 'data/baseline_dev_text.csv'
-
-WARMUP_DIV = 9.793
 BLOCK_SIZE = 128
 
 ## Set all parameters here ##
@@ -45,8 +38,6 @@ def train(model, active_dict, lm_datasets):
       num_rows,
       num_epochs,
       batch_size,
-      warmup_div=WARMUP_DIV,
-      warmup_one_epoch=False
   )
   print("Linear Warm Up: ", warmup_steps)
   print("Save Steps: ", save_steps)
@@ -102,6 +93,9 @@ def parse_args():
   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--seed', type=int, help='Pass in a seed value.')
   parser.add_argument('--model_type', choices=['gpt','gpt2'], default='gpt', help='Pass either \'gpt\' or \'gpt2\'')
+  parser.add_argument('--data_file', default='../data/SBIC.v2.trn.tsv', help='Data file for training.')
+  parser.add_argument('--dev_file', default='../data/SBIC.v2.dev.csv', help='Dev file for training.')
+  parser.add_argument('--sep', default=',', help='Separator for file read.')
   return parser.parse_args()
 
 def check_args(args):
