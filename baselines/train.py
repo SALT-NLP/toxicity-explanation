@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from gpt_utils import *
 from utils import *
-from datasets import load_dataset
+from datasets import load_dataset,DatasetDict
 from transformers import AutoModelForCausalLM
 from transformers import Trainer, TrainingArguments, trainer_utils
 import math
@@ -93,8 +93,9 @@ def parse_args():
   parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('--seed', type=int, help='Pass in a seed value.')
   parser.add_argument('--model_type', choices=['gpt','gpt2'], default='gpt', help='Pass either \'gpt\' or \'gpt2\'')
-  parser.add_argument('--data_file', default='../data/SBIC.v2.trn.tsv', help='Data file for training.')
-  parser.add_argument('--dev_file', default='../data/SBIC.v2.dev.csv', help='Dev file for training.')
+  parser.add_argument('--data_file', default='../data/SBIC.v2.trn.csv', help='Data file for training.')
+  parser.add_argument('--dev_file', default=None, help='Dev file for training.')
+  parser.add_argument('--impl_hate_data', action='store_true', help='Are you using the implicit hate dataset?')
   parser.add_argument('--sep', default=',', help='Separator for file read.')
   return parser.parse_args()
 
@@ -112,12 +113,17 @@ def check_args(args):
 if __name__ == "__main__":
   args = parse_args()
   active_dict = check_args(args)
-  print("Seed: ", active_dict['SEED'])
+  print("Args: ", args)
   
   print('cleaning and splitting dataset ...')
-  dataset = clean_df(args.data_file)
-  datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
+  dataset = clean_df(args.data_file, sep=args.sep, impl=args.impl_hate_data)
   
+  if args.dev_file is None:
+    datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
+  else:
+    dev_dataset = clean_df(args.dev_file, sep=args.sep, impl=args.impl_hate_data)
+    datasets = DatasetDict({'train': dataset, 'test': dev_dataset})
+
   # We need to create the model and tokenizer
   print('tokenizing and block grouping text ...')
   tokenizer = setup_tokenizer(active_dict['MODEL_NAME'])

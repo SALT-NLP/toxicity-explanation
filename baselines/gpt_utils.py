@@ -59,6 +59,8 @@ def clean_df(from_file, sep=',', impl=False, clean=True):
     create_text_column(df)
   else:
     create_sbic_text_column(df)
+  
+  df = df.reset_index()
   return Dataset.from_pandas(df[['text']])
 
 def setup_tokenizer(model_name):
