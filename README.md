@@ -59,6 +59,23 @@ These instructions will get you started with running MixGEN and other knowledge 
     |__ generation_utils.py --> Text generator class for MixGEN MultiView
 ```
 
+### Setup
+This tutorial assumes the use of conda, but any other means by which to control the code environment should work. First clone the repository, and cd into the directory, like so:
+
+```
+git clone https://github.com/GT-SALT/toxicity-explanation
+cd toxicity-explanation
+```
+
+Next, create a conda environment and install the requirements
+
+```
+conda create -n tox_env python=3.7
+pip install -r requirements.txt
+```
+
+Setup should now be complete!
+
 ### Downloading the Data
 To download the data, please see the README in the data/ directory.
 
