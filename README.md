@@ -71,10 +71,11 @@ Next, create a conda environment and install the requirements
 
 ```
 conda create -n tox_env python=3.7
+conda activate tox_env
 pip install -r requirements.txt
 ```
 
-Setup should now be complete!
+You can replace tox_env with a custom name! Setup should now be complete.
 
 ### Downloading the Data
 To download the data, please see the README in the data/ directory.
