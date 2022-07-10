@@ -140,7 +140,6 @@ def predict_samples_impl(model, tokenizer, actual, pred_col, active_dict, max_le
       pred.append(bad_row)
       continue
 
-    print(output_str)
     output_list = output_str.split(sep=tokenizer.sep_token)
     if len(output_list) != 3:
       bad_output += 1
