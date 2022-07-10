@@ -5,6 +5,7 @@ See the SBIC Corpus here:
   https://homes.cs.washington.edu/~msap/social-bias-frames/DATASTATEMENT.html
 """
 import pickle
+import os
 import numpy as np
 import pandas as pd
 
@@ -47,7 +48,7 @@ def create_text_column(df):
   df['text'] = BOS + df.post + SEP + df.targetMinority + SEP + df.targetStereotype + EOS
 
 def clean_df(from_file, sep=',', impl=False, clean=True):
-  df = pd.read_csv(from_file, sep=sep, engine='python')[:100]
+  df = pd.read_csv(from_file, sep=sep, engine='python')
   
   if clean:
     df = clean_post(df)
@@ -105,6 +106,7 @@ def get_samples_from_actual(df, pred_col, post_ids=None, impl=False):
   actual = aggregate_and_format(actual, impl=impl)
   if not impl:
     actual = categorize_var(actual)
+  
   return actual
 
 def predict_samples_impl(model, tokenizer, actual, pred_col, active_dict, max_length, num_beams=3, top_p=0.92):
@@ -138,6 +140,7 @@ def predict_samples_impl(model, tokenizer, actual, pred_col, active_dict, max_le
       pred.append(bad_row)
       continue
 
+    print(output_str)
     output_list = output_str.split(sep=tokenizer.sep_token)
     if len(output_list) != 3:
       bad_output += 1
@@ -157,8 +160,6 @@ def predict_samples_impl(model, tokenizer, actual, pred_col, active_dict, max_le
     pred.append(new_row)
   
   pred_df = pd.DataFrame(pred, columns=pred_col)
-  print(actual)
-  print(pred_df)
   pickle.dump(actual, open(active_dict['TO ACTUAL'], 'wb'))
   pickle.dump(pred_df, open(active_dict['TO PRED'], 'wb'))
 
@@ -168,7 +169,7 @@ def predict_samples_impl(model, tokenizer, actual, pred_col, active_dict, max_le
   print("Bad Categories: ", bad_categories)
 
 
-def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length, num_beams):
+def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length, num_beams=3):
   pred = []
   left_delim = tokenizer.sep_token[0]
   right_delim = tokenizer.sep_token[-1]
@@ -197,7 +198,7 @@ def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length,
       error_inputs.append(post)
       pred.append(bad_row)
       continue
-
+    
     output_list = output_str.split(sep=tokenizer.sep_token)
     if len(output_list) != 5:
       bad_output += 1
@@ -218,6 +219,10 @@ def predict_samples(model, tokenizer, actual, pred_col, active_dict, max_length,
     pred.append(new_row)
   
   pred_df = pd.DataFrame(pred, columns=pred_col)
+  
+  if not os.path.isdir('pred'):
+    os.mkdir('pred')
+
   pickle.dump(actual, open(active_dict['TO ACTUAL'], 'wb'))
   pickle.dump(pred_df, open(active_dict['TO PRED'], 'wb'))
 
@@ -238,14 +243,14 @@ def get_and_print_f1_scores(actual, pred):
 ## Utils for Language Generation Testing
 def get_and_print_lang_gen_scores(df, actual, pred):
   references_tm, hypotheses_tm = get_references_and_hypotheses('targetMinority', actual, pred)
-  
+
   bleu_score_tm_max, bleu_score_tm_avg = get_bleu_score(references_tm, hypotheses_tm)
   rouge_scores_tm_max, rouge_scores_tm_avg = get_rouge_scores(references_tm, hypotheses_tm)
   
   references_ts, hypotheses_ts = get_references_and_hypotheses('targetStereotype', actual, pred)
   bleu_score_ts_max, bleu_score_ts_avg = get_bleu_score(references_ts, hypotheses_ts)
   rouge_scores_ts_max, rouge_scores_ts_avg = get_rouge_scores(references_ts, hypotheses_ts)
-    
+   
   metric = load_metric('bertscore')
   bert_scores_tm = metric.compute(predictions=hypotheses_tm, references=references_tm, lang='en')
   bert_score_tm = get_bert_score(bert_scores_tm, hypotheses_tm, references_tm)
@@ -300,7 +305,7 @@ def get_references_and_hypotheses(col_name, actual, pred):
 
   cmp_grp_target.pred = cmp_grp_target.pred.replace(np.nan, '', regex=True)
   cmp_grp_target.pred = cmp_grp_target.pred.str.lower()
-
+  
   references = cmp_grp_target.actual.tolist()
   hypotheses = cmp_grp_target.pred.tolist()
   
