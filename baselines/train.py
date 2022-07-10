@@ -115,7 +115,7 @@ if __name__ == "__main__":
   print("Seed: ", active_dict['SEED'])
   
   print('cleaning and splitting dataset ...')
-  dataset = clean_df(FROM_TRAIN_FILE)
+  dataset = clean_df(args.data_file)
   datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
   
   # We need to create the model and tokenizer
