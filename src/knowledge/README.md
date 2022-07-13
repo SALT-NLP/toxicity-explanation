@@ -27,7 +27,7 @@ trained per the settings in the command above is given below:
 python test.py --model_type input --data_file ../../data/SBIC.v2.trn.csv --model model/bart_knowledge_k_25/
 ```
 
-
+## Implicit Knowledge Models
 
 ### Training the Implicit Knowledge Model
 To train the implicit knowledge model, first train a target minority generator, then pretrain on a dataset created using prompts and the target minority generator, and finally train the implicit knowledge model.
