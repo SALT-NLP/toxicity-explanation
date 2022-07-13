@@ -28,7 +28,6 @@ def read_and_clean_csv(
     sep=',',
 ):
     df = pd.read_csv(data_file, sep=sep, engine='python')
-    #df = df[:100]
     df = clean_post(df)
     df = clean_target(df, train=train)
     

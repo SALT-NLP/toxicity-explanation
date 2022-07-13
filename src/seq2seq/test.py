@@ -120,6 +120,9 @@ if __name__ == '__main__':
 
       # Run Tests
       print('running model tests ...')
+      if not os.path.isdir('pred'):
+        os.mkdir('pred')
+      
       generate_stereotypes(
           batch_iter,
           seq2seq_tok,

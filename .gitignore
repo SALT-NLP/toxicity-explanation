@@ -1,9 +1,9 @@
-data/*
-model/
-runs/
-pred/
-results/
-fairseq/
+**/data/*
+**/model/
+**/runs/
+**/pred/
+**/results/
+**/fairseq/
 model_viz.py
 *.txt
 .DS_Store
