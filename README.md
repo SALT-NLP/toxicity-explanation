@@ -2,7 +2,7 @@
 
 This repo contains code for the following paper
 
-[Citation TBD]
+Sridhar, Rohit, and Diyi Yang. "Explaining Toxic Text via Knowledge Enhanced Text Generation." NAACL 2022. 
 
 ## Getting Started
 
