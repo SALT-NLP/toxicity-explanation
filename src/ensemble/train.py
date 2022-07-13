@@ -104,7 +104,6 @@ if __name__ == '__main__':
       else:
         datasets = dataset.train_test_split(test_size=0.2, shuffle=True)
     
-    print(datasets)
     print('tokenizing data ...')
     tokenizer, tokenized = tokenize_textgen_df(
       datasets,
