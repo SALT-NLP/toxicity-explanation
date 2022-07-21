@@ -2,7 +2,7 @@
 
 This repo contains code for the following paper
 
-```Sridhar, Rohit, and Diyi Yang. "Explaining Toxic Text via Knowledge Enhanced Text Generation." NAACL 2022. ```
+[Explaining Toxic Text via Knowledge Enhanced Text Generation](https://aclanthology.org/2022.naacl-main.59) (Sridhar & Yang, NAACL 2022)
 
 ## Getting Started
 
@@ -62,14 +62,14 @@ These instructions will get you started with running MixGEN and other knowledge 
 ### Setup
 This tutorial assumes the use of conda, but any other means by which to control the code environment should work. First clone the repository, and cd into the directory, like so:
 
-```
+```bash
 git clone https://github.com/GT-SALT/toxicity-explanation
 cd toxicity-explanation
 ```
 
 Next, create a conda environment and install the requirements
 
-```
+```bash
 conda create -n tox_env python=3.7
 conda activate tox_env
 pip install -r requirements.txt
